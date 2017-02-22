@@ -15,5 +15,5 @@ Meeting Notes 2/21:
 * Block switching - Mark
     * Perceptual entropy to aid with block switching
         * Value in book is wrong
-* Spectral interpolation - Nick
+* Spectral transposition - Nick
 * Better noise masking research?
