@@ -17,3 +17,7 @@ Meeting Notes 2/21:
         * Value in book is wrong
 * Spectral transposition - Nick
 * Better noise masking research?
+
+Directories:
+* Papers - useful literature pertaining to our chosen features
+* baseCoder - a complete set of files that can code the audio file in the pac format
