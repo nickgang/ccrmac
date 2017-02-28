@@ -12,6 +12,7 @@ import numpy as np  # used for arrays
 from window import SineWindow,KBDWindow  # current window used for MDCT -- implement KB-derived?
 from mdct import MDCT,IMDCT  # fast MDCT implementation (uses numpy FFT)
 from quantize import *  # using vectorized versions (to use normal versions, uncomment lines 18,67 below defining vMantissa and vDequantize)
+from SBR import HiFreqRec,freqToBin # used for SBR
 
 # used only by Encode
 from psychoac import CalcSMRs  # calculates SMRs for each scale factor band
@@ -39,6 +40,7 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
     mdctLine /= rescaleLevel  # put overall gain back to original level
 
     ### SBR Decoder Module 1 - High Frequency Reconstruction ###
+    mdctLine = HiFreqRec(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
 
     ### SBR Decoder Module 2 - Additional High Frequency Components ###
 
