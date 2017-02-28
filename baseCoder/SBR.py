@@ -11,12 +11,11 @@ import numpy as np
 # High Frequency Reconstruction
 def HiFreqRec(mdctLines,fs,cutoff):
     nMDCT = len(mdctLines)
-    freqVec = np.arange(0,fs/2,fs/float(N))+fs/float(2*N) # MDCT Frequencies
-    cutBin = np.argwhere(freqVec==cutoff) # Find index of cutoff frequency
-
+    N = 2*nMDCT
+    freqVec = np.arange(0,fs/2,fs/float(N))+fs/float(2.*N) # MDCT Frequencies
+    cutBin = np.argmin(np.absolute(freqVec-cutoff)) # Find index of cutoff frequency
     lowerBand = mdctLines[0:cutBin]
-    mdctLines[cutBin:cutBin+len(lowerBand)] = lowerBand # Do the transposition
-
+    mdctLines[cutBin+1:cutBin+len(lowerBand)+1] = lowerBand # Do the transposition
     return mdctLines
 
 # Additional High Frequency Components
