@@ -51,8 +51,22 @@ def AddHiFreqs(mdctLines,fs,cutoff):
     return mdctLines
 
 # Envelope Adjustment
+# Envelope Adjustment
 def EnvAdjust(mdctLines,fs,envelope):
-    return np.zeros_like(mdctLines)
+    nMDCT = len(mdctLines)
+    mdctFreq = np.arange(0,fs/2,fs/float(N))+(fs/float(2.*N))
+    bandLimits = p.cbFreqLimits # Zwicker critical band upper limits
+    cutBand = np.argwhere(bandLimits>=cutoff)[0] # Next band limit above cutoff freq
+    nHfBands = len(envelope)
+    tempLines = np.copy(mdctLines)
+
+    for i in range(nHfBands):
+        # Find MDCT lines in this critical band and apply envelope from encoder
+        bandLines = np.intersect1d(np.argwhere(mdctFreq>bandLimits[cutBand+i]),\
+                                   np.argwhere(mdctFreq<=bandLimits[cutBand+i+1]))
+        tempLines[bandLines] *= envelope[i]
+
+    return tempLines
 
 # Utility Function to Convert Cutoff Freq to Bin number
 def freqToBin(nMDCT,cutoff,fs):
