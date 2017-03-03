@@ -92,16 +92,17 @@ def EncodeSingleChannel(data,codingParams):
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
 
     # Calculate Spectral Envelope based on original signal
-    specEnv = calcSpecEnv(data,codingParams.sbrCutoff,codingParams.sampleRate)
+    # specEnv = calcSpecEnv(data,codingParams.sbrCutoff,codingParams.sampleRate)
 
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data
     #Decimate and lowpass signal by factor determined by cutoff frequency
     doDecimate = False
 
+    #TODO: grab previous and next block for filtering
     if doDecimate==True:
-        Wc = codingParams.sbrCutoff/float(codingParams.sampleRate/2)# Normalized cutoff frequency
-        b,a = butter(4,Wn) 
+        Wc = codingParams.sbrCutoff/float(codingParams.sampleRate/2.)# Normalized cutoff frequency
+        b,a = butter(4,Wn)
         data = lfilter(b,a,data)
 
     mdctTimeSamples = SineWindow(data)

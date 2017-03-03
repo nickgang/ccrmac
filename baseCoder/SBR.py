@@ -6,6 +6,7 @@ Copyright 2017 Nick Gang -- All rights reserved
 -----------------------------------------------------------------------
 """
 import numpy as np
+import psychoac as p
 import window as w
 
 ########## Encoder Methods ##########
@@ -47,10 +48,8 @@ def AddHiFreqs(mdctLines,fs,cutoff):
     cutBin = freqToBin(nMDCT,cutoff,fs)
     noiseBins = len(mdctLines[cutBin:])
     mdctLines[cutBin:] *= np.absolute(np.random.normal(1,0.5,noiseBins))# Add some noise to reconstructed bins
-    mdctLines[cutBin:] *= 0.1 # Hardcoding this hack until envelope is ready
     return mdctLines
 
-# Envelope Adjustment
 # Envelope Adjustment
 def EnvAdjust(mdctLines,fs,envelope):
     nMDCT = len(mdctLines)

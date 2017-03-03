@@ -140,7 +140,7 @@ class PACFile(AudioFile):
         myParams.nMDCTLines = myParams.nSamplesPerBlock = nMDCTLines
         myParams.nScaleBits = nScaleBits
         myParams.nMantSizeBits = nMantSizeBits
-        myParams.sbrCutoff = sampleRate/4 # Hardcoding to half spectrum for now
+        myParams.sbrCutoff = sampleRate/4.
         # add in scale factor band information
         myParams.sfBands =sfBands
         # start w/o all zeroes as data from prior block to overlap-and-add for output
@@ -350,6 +350,7 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
+    #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
     input_filename = "sbrTest.wav"
     coded_filename = "coded.pac"
     output_filename = "sbrTest_128kbps.wav"
