@@ -12,11 +12,12 @@ import numpy as np  # used for arrays
 from window import SineWindow,KBDWindow  # current window used for MDCT -- implement KB-derived?
 from mdct import MDCT,IMDCT  # fast MDCT implementation (uses numpy FFT)
 from quantize import *  # using vectorized versions (to use normal versions, uncomment lines 18,67 below defining vMantissa and vDequantize)
-from SBR import HiFreqRec,freqToBin # used for SBR
+from SBR import * # Methods used for SBR
 
 # used only by Encode
 from psychoac import CalcSMRs  # calculates SMRs for each scale factor band
 from bitalloc import BitAlloc,BitAllocUniform,BitAllocConstSNR,BitAllocConstMNR  #allocates bits to scale factor bands given SMRs
+from scipy import signal # signal processing tools
 
 
 def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
@@ -43,7 +44,7 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
     mdctLine = HiFreqRec(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
 
     ### SBR Decoder Module 2 - Additional High Frequency Components ###
-
+    mdctLine = AddHiFreqs(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
     ### SBR Decoder Module 3 - Envelope Adjustment ###
 
     # IMDCT and window the data for this channel
@@ -90,9 +91,19 @@ def EncodeSingleChannel(data,codingParams):
     bitBudget -=  nScaleBits*(sfBands.nBands +1)  # less scale factor bits (including overall scale factor)
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
 
+    # Calculate Spectral Envelope based on original signal
+    specEnv = calcSpecEnv(data,codingParams.sbrCutoff,codingParams.sampleRate)
 
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data
+    #Decimate and lowpass signal by factor determined by cutoff frequency
+    doDecimate = False
+
+    if doDecimate==True:
+        Wc = codingParams.sbrCutoff/float(codingParams.sampleRate/2)# Normalized cutoff frequency
+        b,a = butter(4,Wn) 
+        data = lfilter(b,a,data)
+
     mdctTimeSamples = SineWindow(data)
     mdctLines = MDCT(mdctTimeSamples, halfN, halfN)[:halfN]
 

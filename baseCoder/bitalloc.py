@@ -73,26 +73,37 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
         smrSort = np.argsort(localSMR)[::-1]
         maxSMR = smrSort[0]
 
-        # Enter this loop when can't allocate bit to max SMR
         if allocBits+nLines[maxSMR] >= bitBudget:
             for i in range(1,nBands):
-                maxSMR = smrSort[i] # Check next highest SMR
+                maxSMR = smrSort[i]
                 if (allocBits)+nLines[maxSMR] >= bitBudget:
                     pass
                 else:
                     allocBits += nLines[maxSMR]
                     mantBits[maxSMR] += 1
                     localSMR[maxSMR] -= 6
-
-            break # Once the remaining bits are allocated we are done
+            break
         else:
             allocBits += nLines[maxSMR]
             mantBits[maxSMR] += 1
             localSMR[maxSMR] -= 6
 
-    mantBits[np.nonzero(mantBits < 2)] = 0 # No lonely or negative bits
-    mantBits[np.nonzero(mantBits > maxMantBits)] = maxMantBits # Enforce max mant bits
+    # Go back through and reallocate lonely bits and overflowing bits
+    badBand = mantBits < maxMantBits
+    while (mantBits==1).any() and badBand.any():
+        # Pick lonely bit in highest critical band possible
+        i = np.max(np.argwhere(mantBits==1))
+        mantBits[i] = 0
+        badBand[i] = False
 
+        i = np.arange(nBands)[badBand][np.argmax((SMR-mantBits*6)[badBand])]
+        if (bitBudget-nLines[i]) >= 0:
+            mantBits[i] += 1
+            bitBudget -= nLines[i]
+            if mantBits[i] >= maxMantBits:
+                badBand[i] = False
+            else:
+                badBand[i] = False
     return mantBits
 
 #-----------------------------------------------------------------------------
