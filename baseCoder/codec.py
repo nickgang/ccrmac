@@ -40,12 +40,13 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
         iMant += nLines
     mdctLine /= rescaleLevel  # put overall gain back to original level
 
-    ### SBR Decoder Module 1 - High Frequency Reconstruction ###
-    mdctLine = HiFreqRec(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
+    if codingParams.doSBR == True:
+        ### SBR Decoder Module 1 - High Frequency Reconstruction ###
+        mdctLine = HiFreqRec(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
 
-    ### SBR Decoder Module 2 - Additional High Frequency Components ###
-    mdctLine = AddHiFreqs(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
-    ### SBR Decoder Module 3 - Envelope Adjustment ###
+        ### SBR Decoder Module 2 - Additional High Frequency Components ###
+        mdctLine = AddHiFreqs(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
+        ### SBR Decoder Module 3 - Envelope Adjustment ###
 
     # IMDCT and window the data for this channel
     # data = SineWindow( IMDCT(mdctLine, halfN, halfN) )  # takes in halfN MDCT coeffs

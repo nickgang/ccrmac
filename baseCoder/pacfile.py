@@ -141,6 +141,7 @@ class PACFile(AudioFile):
         myParams.nScaleBits = nScaleBits
         myParams.nMantSizeBits = nMantSizeBits
         myParams.sbrCutoff = sampleRate/4.
+        myParams.doSBR = False
         # add in scale factor band information
         myParams.sfBands =sfBands
         # start w/o all zeroes as data from prior block to overlap-and-add for output
