@@ -105,6 +105,7 @@ from audiofile import * # base class
 from bitpack import *  # class for packing data into an array of bytes where each item's number of bits is specified
 import codec    # module where the actual PAC coding functions reside(this module only specifies the PAC file format)
 from psychoac import ScaleFactorBands, AssignMDCTLinesFromFreqLimits  # defines the grouping of MDCT lines into scale factor bands
+from MS import MSEncode, MSDecode
 import sys
 
 import numpy as np  # to allow conversion of data blocks to numpy's array object
@@ -205,6 +206,7 @@ class PACFile(AudioFile):
             codingParams.overlapAndAdd[iCh] = decodedData[codingParams.nMDCTLines:]  # save other half for next pass
 
         # end loop over channels, return signed-fraction samples for this block
+        data = MSDecode(data)
         return data
 
 
@@ -256,6 +258,7 @@ class PACFile(AudioFile):
         codingParams.priorBlock = data  # current pass's data is next pass's prior block data
 
         # (ENCODE HERE) Encode the full block of multi=channel data
+        fullBlockData = MSEncode(fullBlockData)
         (scaleFactor,bitAlloc,mantissa, overallScaleFactor) = self.Encode(fullBlockData,codingParams)  # returns a tuple with all the block-specific info not in the file header
 
         # for each channel, write the data to the output file
@@ -352,9 +355,9 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "sbrTest.wav"
-    coded_filename = "coded.pac"
-    output_filename = "sbrTest_128kbps.wav"
+    input_filename = "input.wav"
+    coded_filename = "input.pac"
+    output_filename = "inputR_128kbps.wav"
     data_rate = 128000. # User defined data rate in bits/s/ch
 
     if len(sys.argv) > 1:
