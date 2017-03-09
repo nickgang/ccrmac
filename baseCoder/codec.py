@@ -93,7 +93,7 @@ def EncodeSingleChannel(data,codingParams):
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
 
     # Calculate Spectral Envelope based on original signal
-    # specEnv = calcSpecEnv(data,codingParams.sbrCutoff,codingParams.sampleRate)
+    specEnv = calcSpecEnv(data,codingParams.sbrCutoff,codingParams.sampleRate)
 
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data
