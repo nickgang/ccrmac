@@ -140,8 +140,8 @@ class PACFile(AudioFile):
         myParams.nMDCTLines = myParams.nSamplesPerBlock = nMDCTLines
         myParams.nScaleBits = nScaleBits
         myParams.nMantSizeBits = nMantSizeBits
-        myParams.sbrCutoff = sampleRate/4.
-        myParams.doSBR = False
+        myParams.sbrCutoff = 9000. # Specified in Hz
+        myParams.doSBR = True
         # add in scale factor band information
         myParams.sfBands =sfBands
         # start w/o all zeroes as data from prior block to overlap-and-add for output
@@ -387,15 +387,19 @@ if __name__=="__main__":
         if Direction == "Encode":
             # set additional parameters that are needed for PAC file
             # (beyond those set by the PCM file on open)
-            codingParams.nMDCTLines = 512
+            codingParams.nMDCTLines = 1024
             K = 2*codingParams.nMDCTLines # Number of input samples/block
-            codingParams.nScaleBits = 3
+            codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
             # Calculate target bits/line based on Fs and data rate
             codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*\
                                                 K) - 204)/K
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = codingParams.nMDCTLines
+            # SBR related stuff
+            codingParams.sbrCutoff = 9000. # Specified in Hz
+            codingParams.doSBR = True # For toggling SBR algorithm
+
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16
