@@ -73,3 +73,10 @@ def freqToBin(nMDCT,cutoff,fs):
     freqVec = np.arange(0,fs/2,fs/float(N))+fs/float(2.*N) # MDCT Frequencies
     cutBin = np.argmin(np.absolute(freqVec-cutoff)) # Find index of cutoff frequency
     return cutBin
+
+# Utility Function to Convert cutoff frequency to
+def freqToBand(cutoff):
+    bandLimits = p.cbFreqLimits
+    cutBand = np.argwhere(bandLimits>=cutoff)[0] # Next band limit above cutoff freq
+
+    return cutBand
