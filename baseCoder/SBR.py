@@ -58,7 +58,7 @@ def AddHiFreqs(mdctLines,fs,cutoff):
     return mdctLines
 
 # Envelope Adjustment (assumes HF Reconstruction has occured)
-def EnvAdjust(mdctLines,fs,envelope):
+def EnvAdjust(mdctLines,fs,cutoff,envelope):
     nMDCT = len(mdctLines)
     N = 2*nMDCT
     mdctFreq = np.arange(0,fs/2,fs/float(N))+(fs/float(2.*N))
