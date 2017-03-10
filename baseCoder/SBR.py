@@ -60,6 +60,7 @@ def AddHiFreqs(mdctLines,fs,cutoff):
 # Envelope Adjustment (assumes HF Reconstruction has occured)
 def EnvAdjust(mdctLines,fs,envelope):
     nMDCT = len(mdctLines)
+    N = 2*nMDCT
     mdctFreq = np.arange(0,fs/2,fs/float(N))+(fs/float(2.*N))
     bandLimits = p.cbFreqLimits # Zwicker critical band upper limits
     cutBand = np.argwhere(bandLimits>=cutoff)[0] # Next band limit above cutoff freq
