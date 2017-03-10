@@ -22,13 +22,20 @@ def calcSpecEnv(data,cutoff,fs):
     Xn = np.fft.fft(w.HanningWindow(data),N)
     hannWin = (1/float(N))*np.sum(np.power(w.HanningWindow(np.ones_like(data)),2)) # Get avg pow of hann window
     XnI = (4/(np.power(N,2)*hannWin))*(np.power(np.abs(Xn),2)) # Compute values of FFT intensity
+
     bandLimits = p.cbFreqLimits # Zwicker critical band upper limits
     cutBand = np.argwhere(bandLimits>=cutoff)[0] # Next band limit above cutoff freq
     nHfBands = len(bandLimits)-cutBand # How many bands will be reconstructed
     specEnv = np.zeros(nHfBands-1)
     for i in range(nHfBands-1):
-        bandLines = np.intersect1d(np.argwhere(freqVec>bandLimits[cutBand+i]),np.argwhere(freqVec<=bandLimits[cutBand+i+1]))
-        specEnv[i] = np.mean(XnI[bandLines]) # Spec Env is avg intensity in each hi-freq critical band
+        bandLines = np.intersect1d(np.argwhere(freqVec>bandLimits[cutBand+i]),\
+                                   np.argwhere(freqVec<=bandLimits[cutBand+i+1]))
+        highMean = np.mean(XnI[bandLines])
+        subBand = XnI[i*len(bandLines):(i+1)*len(bandLines)]
+        subMean = np.mean(subBand)
+        # Spec Env is ratio of avg intensity in each hi-freq critical band to corresponding sub band
+        specEnv[i]=highMean/subMean
+    specEnv[np.nonzero(np.isnan(specEnv))] = 1 # Get rid of pesky nans
 
     return specEnv
 
@@ -50,7 +57,7 @@ def AddHiFreqs(mdctLines,fs,cutoff):
     mdctLines[cutBin:] *= np.absolute(np.random.normal(1,0.5,noiseBins))# Add some noise to reconstructed bins
     return mdctLines
 
-# Envelope Adjustment
+# Envelope Adjustment (assumes HF Reconstruction has occured)
 def EnvAdjust(mdctLines,fs,envelope):
     nMDCT = len(mdctLines)
     mdctFreq = np.arange(0,fs/2,fs/float(N))+(fs/float(2.*N))
@@ -63,8 +70,8 @@ def EnvAdjust(mdctLines,fs,envelope):
         # Find MDCT lines in this critical band and apply envelope from encoder
         bandLines = np.intersect1d(np.argwhere(mdctFreq>bandLimits[cutBand+i]),\
                                    np.argwhere(mdctFreq<=bandLimits[cutBand+i+1]))
+        bandInt = np.mean(tempLines[bandLines]) # Average intensity in current band
         tempLines[bandLines] *= envelope[i]
-
     return tempLines
 
 # Utility Function to Convert Cutoff Freq to Bin number
@@ -74,9 +81,8 @@ def freqToBin(nMDCT,cutoff,fs):
     cutBin = np.argmin(np.absolute(freqVec-cutoff)) # Find index of cutoff frequency
     return cutBin
 
-# Utility Function to Convert cutoff frequency to
+# Utility Function to Convert cutoff frequency to critical band index
 def freqToBand(cutoff):
     bandLimits = p.cbFreqLimits
     cutBand = np.argwhere(bandLimits>=cutoff)[0] # Next band limit above cutoff freq
-
     return cutBand
