@@ -1,5 +1,4 @@
 import numpy as np
-# import psychoac_ as p
 from mdct import *
 from window import *
 import matplotlib.pyplot as plt
@@ -232,12 +231,37 @@ def CalcSMRs(data, MDCTdata, MDCTscale, sampleRate, sfBands):
     sineWin = (1/float(N))*np.sum(np.power(SineWindow(np.ones_like(data)),2)) # Get avg pow of KBD window
     sineDB = SPL((2/(sineWin))*(np.power(np.absolute(MDCTdata),2.)))# Find dB SPL of MDCT values
 
+    #print sineDB.size
+    #print maskThresh.size
 
     smrVec = sineDB - maskThresh # This gives SMR for every MDCT line individually
+    #print sfBands.lowerLine, sfBands.upperLine, "\n"
+    #print smrVec, "\n"
+    #print smrVec.size, "\n"
     SMR = np.zeros(sfBands.nBands)
 
     for i in range(sfBands.nBands):
-        SMR[i] = np.max(smrVec[sfBands.lowerLine[i]:sfBands.upperLine[i]+1]) # Look at max SMR in this critical band
 
+        if(sfBands.upperLine[i]-(sfBands.lowerLine[i]) > 0):
+            SMR[i] = np.max(smrVec[sfBands.lowerLine[i]:sfBands.upperLine[i]+1]) # Look at max SMR in this critical band
+        else:
+            SMR[i] = smrVec[sfBands.lowerLine[i]]
     return SMR
+
+def DetectTransient(data, codingParams):
+    fs = 48000
+    #fs = codingParams.sampleRate
+    N = data.size
+    MDCTdata = MDCT(SineWindow(data),N/2,N/2)
+    sineWin = (1/float(N))*np.sum(np.power(SineWindow(np.ones_like(data)),2)) # Get avg pow of KBD window
+    sineDB = SPL((2/(sineWin))*(np.power(np.absolute(MDCTdata),2.)))# Find dB SPL of MDCT values
+    thresh = getMaskedThreshold(data,MDCTdata,0,fs,ScaleFactorBands(AssignMDCTLinesFromFreqLimits(MDCTdata.size,fs)))
+    PE = np.sum(np.log2(1+np.sqrt(Intensity(sineDB)/(Intensity(sineDB-thresh)))))/(MDCTdata.size)
+    delta = (PE - codingParams.prevPE)
+    #if(codingParams.prevPE == -10): DT = False
+    print delta
+    DT = delta > 1
+    #print PE
+    codingParams.prevPE = PE
+    return (DT)
 #-----------------------------------------------------------------------------
