@@ -122,6 +122,7 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, cutBin=25):
         Return:
             bits[nBands] is number of bits allocated to each scale factor band
     """
+    cutBin = int(cutBin) # Make sure this is an integer
     mantBits = np.zeros_like(nLines[0:cutBin+1],dtype=int)
     localSMR = np.array(SMR,copy=True)[0:cutBin+1] # SMR of sub band
     subBand = np.array(nLines,copy=True)[0:cutBin+1]
@@ -140,6 +141,7 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, cutBin=25):
                     allocBits += subBand[maxSMR]
                     mantBits[maxSMR] += 1
                     localSMR[maxSMR] -= 6
+
             break
         else:
             allocBits += subBand[maxSMR]
@@ -153,8 +155,7 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, cutBin=25):
         i = np.max(np.argwhere(mantBits==1))
         mantBits[i] = 0
         badBand[i] = False
-
-        i = np.arange(nBands-(cutBin+1))[badBand][np.argmax((localSMR-mantBits*6)[badBand])]
+        i = (np.arange(cutBin+1)[badBand])[np.argmax((localSMR-mantBits*6)[badBand])]
         if (bitBudget-subBand[i]) >= 0:
             mantBits[i] += 1
             bitBudget -= subBand[i]
