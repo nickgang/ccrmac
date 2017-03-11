@@ -170,7 +170,7 @@ class PACFile(AudioFile):
         bitAllocFull = []
         mantissaFull = []
         overallScaleFactorFull = []
-        for iCh in range(codingParams.nChannels+1):
+        for iCh in range(codingParams.nChannels):
             data.append(np.array([],dtype=np.float64))  # add location for this channel's data
             # read in string containing the number of bytes of data for this channel (but check if at end of file!)
             s=self.fp.read(calcsize("<L"))  # will be empty if at end of file
@@ -217,18 +217,19 @@ class PACFile(AudioFile):
                 # Dequantize this band of spectral envelope
                 codingParams.specEnv[i] = codec.DequantizeFP(envScale,envMant,\
                                 codingParams.nScaleBits,codingParams.nScaleBits)
-            codingParams.couplingParams = np.zeros(25-codingParams.nCouplingStart+1)
-            for i in range(len(codingParams.couplingParams)):
-                paramsScale = pb.ReadBits(codingParams.nScaleBits)
-                paramsMant = pb.ReadBits(codingParams.nScaleBits)
-                codingParams.couplingParams[i] = codec.DequantizeFP(paramsScale, paramsMant, codingParams.nScaleBits, codingParams.nScaleBits)
+            codingParams.couplingParams = [] 
+            for i in range(codingParams.nCouplingStart,25):
+                for j in range(codingParams.nChannels):
+                    paramsScale = pb.ReadBits(codingParams.nScaleBits)
+                    paramsMant = pb.ReadBits(codingParams.nScaleBits)
+                    codingParams.couplingParams.append(codec.DequantizeFP(paramsScale, paramsMant, codingParams.nScaleBits, codingParams.nScaleBits))
 
             # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
             scaleFactorFull.append(scaleFactor)
             bitAllocFull.append(bitAlloc)
             mantissaFull.append(mantissa)
-            overallScaleFactorFull.append(overallScaleFactorFull)
-        decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
+            overallScaleFactorFull.append(overallScaleFactor)
+        decodedData = self.Decode(scaleFactorFull,bitAllocFull,mantissaFull, overallScaleFactorFull,codingParams)
         for k in range(codingParams.nChannels):
             data[k] = np.concatenate( (data[k],np.add(codingParams.overlapAndAdd[k],decodedData[k][:codingParams.nMDCTLines]) ) )  # data[iCh] is overlap-and-added data
             codingParams.overlapAndAdd[k] = decodedData[k][codingParams.nMDCTLines:]  # save other half for next pass

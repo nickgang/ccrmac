@@ -61,7 +61,6 @@ def DecodeWithCoupling(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingPa
     """Reconstitutes a multi-channel block of encoded data into a multi-channel block of
     signed-fraction data based on the parameters in a PACFile object"""
 
-    rescaleLevel = 1.*(1<<overallScaleFactor)
     halfN = codingParams.nMDCTLines
     N = 2*halfN
     # vectorizing the Dequantize function call
@@ -70,6 +69,7 @@ def DecodeWithCoupling(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingPa
     # reconstitute the first halfN MDCT lines of this channel from the stored data
     mdctLines = []
     for k in range(codingParams.nChannels+1):
+        rescaleLevel = 1.*(1<<overallScaleFactor[k])
         mdctLine = np.zeros(halfN,dtype=np.float64)
         iMant = 0
         for iBand in range(codingParams.sfBands.nBands):
@@ -85,7 +85,7 @@ def DecodeWithCoupling(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingPa
     mdctLines = ChannelDecoupling(uncoupledData,coupledData,codingParams.couplingParams,codingParams.sampleRate)
     fullData = []
     for k in range(codingParams.nChannels):
-        mdctLine = mdctLines[k]
+        mdctLine = np.array(mdctLines[k])
         if codingParams.doSBR == True:
             ### SBR Decoder Module 1 - High Frequency Reconstruction ###
             mdctLine = HiFreqRec(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
@@ -214,8 +214,6 @@ def EncodeChannelsWithCoupling(data,codingParams):
     maxMantBits = (1<<codingParams.nMantSizeBits)  # 1 isn't an allowed bit allocation so n size bits counts up to 2^n
     if maxMantBits>16: maxMantBits = 16  # to make sure we don't ever overflow mantissa holders
     sfBands = codingParams.sfBands
-    # vectorizing the Mantissa function call
-#    vMantissa = np.vectorize(Mantissa)
 
     # compute target mantissa bit budget for this block of halfN MDCT mantissas
     bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
@@ -264,9 +262,8 @@ def EncodeChannelsWithCoupling(data,codingParams):
 
         if codingParams.doSBR == True and k < codingParams.nChannels:
             # Critical band starting here are above cutoff
-            cutBin = freqToBand(codingParams.sbrCutoff)
+            cutBin = 21 # freqToBand(codingParams.sbrCutoff)
             # perform bit allocation using SMR results
-            # print 'cutBin: ',cutBin,'nBands: ',sfBands.nBands,'nLines: ',sfBands.nLines
             bitAlloc = BitAllocSBR(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs,cutBin)
         else:
             bilAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
@@ -287,10 +284,16 @@ def EncodeChannelsWithCoupling(data,codingParams):
             if bitAlloc[iBand]:
                 mantissa[iMant:iMant+nLines] = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
                 iMant += nLines
-        scaleFactorFull.append(scaleFactor)
-        bitAllocFull.append(bitAlloc)
-        mantissaFull.append(mantissa)
-        overallScaleFull.append(overallScale)
+        if k < codingParams.nChannels:
+            scaleFactorFull.append(scaleFactor)
+            bitAllocFull.append(bitAlloc)
+            mantissaFull.append(mantissa)
+            overallScaleFull.append(overallScale)
+        else:
+            codingParams.coupledScaleFactor = scaleFactor
+            codingParams.coupledBitAlloc = bitAlloc
+            codingParams.coupledMantissa = mantissa
+            codingParams.coupledOverallScaleFactor = overallScale
     # end of loop over scale factor bands
 
     # return results

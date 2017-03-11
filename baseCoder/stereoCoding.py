@@ -38,19 +38,23 @@ def ChannelCoupling(mdct, Fs):
     coupledChannel = np.zeros(nMdctLines - start)
     uncoupledData = []
     coupleChans = []
+    phase_shift = 0
+    for n in range(nChannels):
+        phase_shift = np.min((np.min(mdct[n]),phase_shift))
+    phase_shift *= -1
     for n in range(nChannels):
         coupleChans.append(mdct[n][start:])
         # TODO: Phase adjustment
-        coupledChannel += mdct[n][start:]
+        coupledChannel += np.array(mdct[n][start:])+phase_shift
         uncoupledData.append(mdct[n][:start])
-    couplingParams = []
+    couplingParams = [phase_shift]
     for n in range(couplingStart,len(mdctLineAssign)):
         nLines = float(mdctLineAssign[n])
         startIdx = sum(mdctLineAssign[:n])
         endIdx = int(startIdx + nLines)
         power_couple = sum(coupledChannel[startIdx:endIdx])/nLines
         for k in range(nChannels):
-            power_chan = sum(np.array(coupleChans[k][startIdx:endIdx]))/nLines
+            power_chan = sum(np.array(coupleChans[k][startIdx:endIdx])+phase_shift)/nLines
             couplingParams.append(power_chan/power_couple)
     uncoupledData = np.array(uncoupledData)
     uncoupledPad = np.zeros((len(uncoupledData),nMdctLines-len(uncoupledData[0])))
@@ -63,10 +67,12 @@ def ChannelDecoupling(uncoupledData,coupledChannel,couplingParams,Fs):
     nMDCTLines = len(coupledChannel) 
     nChannels = len(uncoupledData)
     couplingScales = couplingParams
+    print couplingScales
     mdctLineAssign = AssignMDCTLinesFromFreqLimits(nMDCTLines, Fs)
     uncoupledLen = sum(mdctLineAssign[:couplingStart])
     coupledLen = nMDCTLines-uncoupledLen 
-    couplingIdx = 0
+    phase_shift = couplingParams[0]
+    couplingIdx = 1
     startIdx = uncoupledLen
     reconstructedChannels = np.zeros([nChannels,nMDCTLines])
     if len(uncoupledData[0]) > 0:
@@ -79,7 +85,7 @@ def ChannelDecoupling(uncoupledData,coupledChannel,couplingParams,Fs):
         for k in range(nChannels):
             scale = couplingScales[couplingIdx]
             couplingIdx += 1
-            reconstructedChannels[k][startIdx:endIdx]+= scale*np.array(couplingBand)
+            reconstructedChannels[k][startIdx:endIdx]+= scale*np.array(couplingBand)-phase_shift
         startIdx += nLines
     mdct = []
     for n in range(nChannels):
