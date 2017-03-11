@@ -105,7 +105,6 @@ from audiofile import * # base class
 from bitpack import *  # class for packing data into an array of bytes where each item's number of bits is specified
 import codec    # module where the actual PAC coding functions reside(this module only specifies the PAC file format)
 from psychoac import ScaleFactorBands, AssignMDCTLinesFromFreqLimits  # defines the grouping of MDCT lines into scale factor bands
-from MS import MSEncode, MSDecode
 import sys
 
 import numpy as np  # to allow conversion of data blocks to numpy's array object
@@ -160,7 +159,7 @@ class PACFile(AudioFile):
         """
         # loop over channels (whose coded data are stored separately) and read in each data block
         data=[]
-        for iCh in range(codingParams.nChannels):
+        for q in range(1):
             data.append(np.array([],dtype=np.float64))  # add location for this channel's data
             # read in string containing the number of bytes of data for this channel (but check if at end of file!)
             s=self.fp.read(calcsize("<L"))  # will be empty if at end of file
@@ -199,14 +198,16 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can unpack any custom data passed in the nBytes of data >
-
+            couplingParams = np.empty(codingParams.nChannels * sfBands.nBands)
+            for j in range(codingParams.nChannels * sfBands.nBands):
+                couplingParams[j] = pb.ReadBits(codingParams.nCouplingScaleBits)
             # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
-            decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
-            data[iCh] = np.concatenate( (data[iCh],np.add(codingParams.overlapAndAdd[iCh],decodedData[:codingParams.nMDCTLines]) ) )  # data[iCh] is overlap-and-added data
+            decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,couplingParams,codingParams)
+            for iCh in range(codingParams.nChannels):
+                data.append(np.concatenate( (data[iCh],np.add(codingParams.overlapAndAdd[iCh],decodedData[:codingParams.nMDCTLines]) ) ))  # data[iCh] is overlap-and-added data
             codingParams.overlapAndAdd[iCh] = decodedData[codingParams.nMDCTLines:]  # save other half for next pass
 
         # end loop over channels, return signed-fraction samples for this block
-        data = MSDecode(data)
         return data
 
 
@@ -258,11 +259,10 @@ class PACFile(AudioFile):
         codingParams.priorBlock = data  # current pass's data is next pass's prior block data
 
         # (ENCODE HERE) Encode the full block of multi=channel data
-        fullBlockData = MSEncode(fullBlockData)
-        (scaleFactor,bitAlloc,mantissa, overallScaleFactor) = self.Encode(fullBlockData,codingParams)  # returns a tuple with all the block-specific info not in the file header
+        (scaleFactor,bitAlloc,mantissa,overallScaleFactor,couplingParams) = self.Encode(fullBlockData,codingParams)  # returns a tuple with all the block-specific info not in the file header
 
         # for each channel, write the data to the output file
-        for iCh in range(codingParams.nChannels):
+        for iCh in range(1):
 
             # determine the size of this channel's data block and write it to the output file
             nBytes = codingParams.nScaleBits  # bits for overall scale factor
@@ -275,7 +275,7 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can add space for custom data, if desired>
-
+            nBytes += len(couplingParams) * codingParams.nCouplingScaleBits
             # now convert the bits to bytes (w/ extra one if spillover beyond byte boundary)
             if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
             else: nBytes = nBytes/BYTESIZE + 1
@@ -301,7 +301,8 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can add in custom data if space allocated in nBytes above>
-
+            for j in range(len(couplingParams)):
+                pb.WriteBits(couplingParams[j],codingParams.nCouplingScaleBits)
             # finally, write the data in this channel's PackedBits object to the output file
             self.fp.write(pb.GetPackedData())
         # end loop over channels, done writing coded data for all channels
@@ -357,8 +358,8 @@ if __name__=="__main__":
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
     input_filename = "input.wav"
     coded_filename = "input.pac"
-    output_filename = "inputR_128kbps.wav"
-    data_rate = 128000. # User defined data rate in bits/s/ch
+    output_filename = "MSinput_64kbps.wav"
+    data_rate = 64000. # User defined data rate in bits/s/ch
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
@@ -390,10 +391,11 @@ if __name__=="__main__":
         if Direction == "Encode":
             # set additional parameters that are needed for PAC file
             # (beyond those set by the PCM file on open)
-            codingParams.nMDCTLines = 512
+            codingParams.nMDCTLines = 1024
             K = 2*codingParams.nMDCTLines # Number of input samples/block
             codingParams.nScaleBits = 3
             codingParams.nMantSizeBits = 4
+            codingParams.nCouplingScaleBits = 16
             # Calculate target bits/line based on Fs and data rate
             codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*\
                                                 K) - 204)/K
