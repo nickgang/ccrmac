@@ -145,6 +145,9 @@ class PACFile(AudioFile):
         myParams.doSBR = True # For toggling SBR algorithm
         myParams.nSpecEnvBits = 8 # number of bits per spectral envelope band
         myParams.specEnv = np.zeros(24-codec.freqToBand(myParams.sbrCutoff))
+        myParams.doCoupling = True # For toggling coupling
+        myParams.nCouplingScaleBits = nCouplingScaleBits
+        myParams.nCouplingStart = nCouplingStart
 
         # add in scale factor band information
         myParams.sfBands =sfBands
@@ -163,7 +166,11 @@ class PACFile(AudioFile):
         """
         # loop over channels (whose coded data are stored separately) and read in each data block
         data=[]
-        for iCh in range(codingParams.nChannels):
+        scaleFactorFull = []
+        bitAllocFull = []
+        mantissaFull = []
+        overallScaleFactorFull = []
+        for iCh in range(codingParams.nChannels+1):
             data.append(np.array([],dtype=np.float64))  # add location for this channel's data
             # read in string containing the number of bytes of data for this channel (but check if at end of file!)
             s=self.fp.read(calcsize("<L"))  # will be empty if at end of file
@@ -210,11 +217,21 @@ class PACFile(AudioFile):
                 # Dequantize this band of spectral envelope
                 codingParams.specEnv[i] = codec.DequantizeFP(envScale,envMant,\
                                 codingParams.nScaleBits,codingParams.nScaleBits)
+            codingParams.couplingParams = np.zeros(25-codingParams.nCouplingStart+1)
+            for i in range(len(codingParams.couplingParams)):
+                paramsScale = pb.ReadBits(codingParams.nScaleBits)
+                paramsMant = pb.ReadBits(codingParams.nScaleBits)
+                codingParams.couplingParams[i] = codec.DequantizeFP(paramsScale, paramsMant, codingParams.nScaleBits, codingParams.nScaleBits)
 
             # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
-            decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
-            data[iCh] = np.concatenate( (data[iCh],np.add(codingParams.overlapAndAdd[iCh],decodedData[:codingParams.nMDCTLines]) ) )  # data[iCh] is overlap-and-added data
-            codingParams.overlapAndAdd[iCh] = decodedData[codingParams.nMDCTLines:]  # save other half for next pass
+            scaleFactorFull.append(scaleFactor)
+            bitAllocFull.append(bitAlloc)
+            mantissaFull.append(mantissa)
+            overallScaleFactorFull.append(overallScaleFactorFull)
+        decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
+        for k in range(codingParams.nChannels):
+            data[k] = np.concatenate( (data[k],np.add(codingParams.overlapAndAdd[k],decodedData[k][:codingParams.nMDCTLines]) ) )  # data[iCh] is overlap-and-added data
+            codingParams.overlapAndAdd[k] = decodedData[k][codingParams.nMDCTLines:]  # save other half for next pass
 
         # end loop over channels, return signed-fraction samples for this block
         return data
@@ -285,6 +302,7 @@ class PACFile(AudioFile):
             # CUSTOM DATA:
             # < now can add space for custom data, if desired>
             nBytes += codingParams.nSpecEnvBits*len(codingParams.specEnv) # Bits in spectral Env itself
+            nBytes += codingParams.nCouplingScaleBits*len(codingParams.couplingParams)
 
             # now convert the bits to bytes (w/ extra one if spillover beyond byte boundary)
             if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
@@ -316,6 +334,10 @@ class PACFile(AudioFile):
                 pb.WriteBits(envScale,codingParams.nScaleBits)
                 # Hardcoding 4 Mantissa bits, using floating-point to quantize
                 pb.WriteBits(codec.MantissaFP(codingParams.specEnv[i],envScale,codingParams.nScaleBits,4),codingParams.nScaleBits)
+            for i in range(len(codingParams.couplingParams)):
+                paramsScale = codec.ScaleFactor(codingParams.couplingParams[i],codingParams.nScaleBits,4)
+                pb.WriteBits(paramsScale, codingParams.nScaleBits)
+                pb.WriteBits(codec.MantissaFP(codingParams.couplingParams[i],codingParams.nScaleBits,4), codingParams.nScaleBits)
 
             # finally, write the data in this channel's PackedBits object to the output file
             self.fp.write(pb.GetPackedData())
@@ -343,15 +365,15 @@ class PACFile(AudioFile):
         and the overall scale factor for each channel.
         """
         #Passes encoding logic to the Encode function defined in the codec module
-        return codec.Encode(data,codingParams)
+        return codec.EncodeWithCoupling(data,codingParams)
 
     def Decode(self,scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams):
         """
-        Decodes a single audio channel of data based on the values of its scale factors,
+        Decodes multiple audio channels of data based on the values of its scale factors,
         bit allocations, quantized mantissas, and overall scale factor.
         """
         #Passes decoding logic to the Decode function defined in the codec module
-        return codec.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
+        return codec.DecodeWithCoupling(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
 
 
 
@@ -372,10 +394,12 @@ if __name__=="__main__":
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
     input_filename = "sbrTest.wav"
     coded_filename = "coded.pac"
-    output_filename = "sbrTest_64kbps.wav"
+    output_filename = "sbrCoupTest_64kbps.wav"
     data_rate = 64000. # User defined data rate in bits/s/ch
     nSpecEnvBits = 8 # number of bits per spectral envelope band
     cutoff = 9500 # Global SBR cutoff
+    nCouplingScaleBits = 8
+    nCouplingStart = 17
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
@@ -421,6 +445,10 @@ if __name__=="__main__":
             codingParams.doSBR = True # For toggling SBR algorithm
             codingParams.nSpecEnvBits = nSpecEnvBits # Bits per band in spectral envelope
             codingParams.specEnv  = np.zeros(24-codec.freqToBand(codingParams.sbrCutoff))
+            codingParams.doCoupling = True # For toggling stereo coding
+            codingParams.nCouplingScaleBits = nCouplingScaleBits
+            codingParams.nCouplingStart = nCouplingStart
+            
 
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)

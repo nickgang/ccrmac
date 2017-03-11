@@ -13,6 +13,7 @@ from window import SineWindow,KBDWindow  # current window used for MDCT -- imple
 from mdct import MDCT,IMDCT  # fast MDCT implementation (uses numpy FFT)
 from quantize import *  # using vectorized versions (to use normal versions, uncomment lines 18,67 below defining vMantissa and vDequantize)
 from SBR import * # Methods used for SBR
+from stereoCoding import * # Methods used for stereo coding
 
 # used only by Encode
 from psychoac import CalcSMRs  # calculates SMRs for each scale factor band
@@ -55,6 +56,51 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
 
     # end loop over channels, return reconstituted time samples (pre-overlap-and-add)
     return data
+
+def DecodeWithCoupling(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
+    """Reconstitutes a multi-channel block of encoded data into a multi-channel block of
+    signed-fraction data based on the parameters in a PACFile object"""
+
+    rescaleLevel = 1.*(1<<overallScaleFactor)
+    halfN = codingParams.nMDCTLines
+    N = 2*halfN
+    # vectorizing the Dequantize function call
+#    vDequantize = np.vectorize(Dequantize)
+
+    # reconstitute the first halfN MDCT lines of this channel from the stored data
+    mdctLines = []
+    for k in range(codingParams.nChannels+1):
+        mdctLine = np.zeros(halfN,dtype=np.float64)
+        iMant = 0
+        for iBand in range(codingParams.sfBands.nBands):
+            nLines =codingParams.sfBands.nLines[iBand]
+            if bitAlloc[k][iBand]:
+                mdctLine[iMant:(iMant+nLines)]=vDequantize(scaleFactor[k][iBand], mantissa[k][iMant:(iMant+nLines)],codingParams.nScaleBits, bitAlloc[k][iBand])
+            iMant += nLines
+        mdctLine /= rescaleLevel  # put overall gain back to original level
+        mdctLines.append(mdctLine)
+    
+    uncoupledData = mdctLines[0:codingParams.nChannels]
+    coupledData = mdctLines[codingParams.nChannels]
+    mdctLines = ChannelDecoupling(uncoupledData,coupledData,codingParams.couplingParams,codingParams.sampleRate)
+    fullData = []
+    for k in range(codingParams.nChannels):
+        mdctLine = mdctLines[k]
+        if codingParams.doSBR == True:
+            ### SBR Decoder Module 1 - High Frequency Reconstruction ###
+            mdctLine = HiFreqRec(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
+            ### SBR Decoder Module 2 - Additional High Frequency Components ###
+            mdctLine = AddHiFreqs(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
+            ### SBR Decoder Module 3 - Envelope Adjustment ###
+            mdctLine = EnvAdjust(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff,codingParams.specEnv)
+            # print codingParams.specEnv # Print envelope for debugging purposes
+
+        # IMDCT and window the data for this channel
+        # data = KBDWindow( IMDCT(mdctLine, halfN, halfN) )  # takes in halfN MDCT coeffs
+        data = SineWindow( IMDCT(mdctLine, halfN, halfN) )  # takes in halfN MDCT coeffs
+        fullData.append(data)
+    # end loop over channels, return reconstituted time samples (pre-overlap-and-add)
+    return fullData
 
 
 def Encode(data,codingParams):
@@ -151,3 +197,101 @@ def EncodeSingleChannel(data,codingParams):
 
     # return results
     return (scaleFactor, bitAlloc, mantissa, overallScale)
+
+def EncodeWithCoupling(data,codingParams):
+    """Encodes a multi-channel block of signed-fraction data based on the parameters in a PACFile object"""
+    scaleFactor, bitAlloc, mantissa, overallScaleFactor = EncodeChannelsWithCoupling(data,codingParams)
+    return (scaleFactor,bitAlloc,mantissa,overallScaleFactor)
+
+
+def EncodeChannelsWithCoupling(data,codingParams):
+    """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
+
+    # prepare various constants
+    halfN = codingParams.nMDCTLines
+    N = 2*halfN
+    nScaleBits = codingParams.nScaleBits
+    maxMantBits = (1<<codingParams.nMantSizeBits)  # 1 isn't an allowed bit allocation so n size bits counts up to 2^n
+    if maxMantBits>16: maxMantBits = 16  # to make sure we don't ever overflow mantissa holders
+    sfBands = codingParams.sfBands
+    # vectorizing the Mantissa function call
+#    vMantissa = np.vectorize(Mantissa)
+
+    # compute target mantissa bit budget for this block of halfN MDCT mantissas
+    bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
+    bitBudget -=  nScaleBits*(sfBands.nBands +1)  # less scale factor bits (including overall scale factor)
+    bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
+
+    mdctFull = []
+    for k in range(codingParams.nChannels):
+        if codingParams.doSBR == True:
+            # Calculate Spectral Envelope based on original signal
+            specEnv = calcSpecEnv(data[k],codingParams.sbrCutoff,codingParams.sampleRate)
+            # Append in spectral envelope to empty container
+            codingParams.specEnv = specEnv
+
+        # window data for side chain FFT and also window and compute MDCT
+        timeSamples = data[k]
+
+        #Decimate and lowpass signal by factor determined by cutoff frequency
+        doDecimate = False
+        #TODO: grab previous and next block for filtering
+        if doDecimate==True:
+            Wc = codingParams.sbrCutoff/float(codingParams.sampleRate/2.)# Normalized cutoff frequency
+            b,a = signal.butter(4,Wn)
+            data[k] = signal.lfilter(b,a,data[k])
+
+        mdctTimeSamples = SineWindow(data[k])
+        mdctLines = MDCT(mdctTimeSamples, halfN, halfN)[:halfN]
+        mdctFull.append(mdctLines)
+    uncoupledData, coupledData, couplingParams = ChannelCoupling(mdctFull, codingParams.sampleRate)
+    codingParams.couplingParams = couplingParams
+    scaleFactorFull = []
+    bitAllocFull = []
+    mantissaFull = []
+    overallScaleFull  = []
+    
+    for k in range(codingParams.nChannels+1):
+        mdctLines = uncoupledData[k] if k < codingParams.nChannels else coupledData
+        # compute overall scale factor for this block and boost mdctLines using it
+        maxLine = np.max( np.abs(mdctLines) )
+        overallScale = ScaleFactor(maxLine,nScaleBits)  #leading zeroes don't depend on nMantBits
+        mdctLines *= (1<<overallScale)
+
+        # compute the mantissa bit allocations
+        # compute SMRs in side chain FFT
+        SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
+
+        if codingParams.doSBR == True and k < codingParams.nChannels:
+            # Critical band starting here are above cutoff
+            cutBin = freqToBand(codingParams.sbrCutoff)
+            # perform bit allocation using SMR results
+            # print 'cutBin: ',cutBin,'nBands: ',sfBands.nBands,'nLines: ',sfBands.nLines
+            bitAlloc = BitAllocSBR(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs,cutBin)
+        else:
+            bilAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
+
+            # given the bit allocations, quantize the mdct lines in each band
+        scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
+        nMant=halfN
+        for iBand in range(sfBands.nBands):
+            if not bitAlloc[iBand]: nMant-= sfBands.nLines[iBand]  # account for mantissas not being transmitted
+        mantissa=np.empty(nMant,dtype=np.int32)
+        iMant=0
+        for iBand in range(sfBands.nBands):
+            lowLine = sfBands.lowerLine[iBand]
+            highLine = sfBands.upperLine[iBand] + 1  # extra value is because slices don't include last value
+            nLines= sfBands.nLines[iBand]
+            scaleLine = np.max(np.abs( mdctLines[lowLine:highLine] ) )
+            scaleFactor[iBand] = ScaleFactor(scaleLine, nScaleBits, bitAlloc[iBand])
+            if bitAlloc[iBand]:
+                mantissa[iMant:iMant+nLines] = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
+                iMant += nLines
+        scaleFactorFull.append(scaleFactor)
+        bitAllocFull.append(bitAlloc)
+        mantissaFull.append(mantissa)
+        overallScaleFull.append(overallScale)
+    # end of loop over scale factor bands
+
+    # return results
+    return (scaleFactorFull, bitAllocFull, mantissaFull, overallScaleFull)

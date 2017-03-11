@@ -130,6 +130,7 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, cutBin=25):
 
     while allocBits < bitBudget:
         smrSort = np.argsort(localSMR)[::-1]
+        print SMR, localSMR, smrSort,cutBin
         maxSMR = smrSort[0]
 
         if allocBits+subBand[maxSMR] >= bitBudget:
@@ -165,6 +166,7 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, cutBin=25):
                 badBand[i] = False
 
     sbrBits = np.append(mantBits,np.zeros(len(nLines)-len(subBand))) # Add zeros back in for HF band
+    print sbrBits
     return sbrBits.astype(int)
 
 #-----------------------------------------------------------------------------
