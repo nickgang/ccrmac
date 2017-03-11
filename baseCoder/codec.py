@@ -20,7 +20,7 @@ from bitalloc import BitAlloc,BitAllocSBR,BitAllocUniform,BitAllocConstSNR,BitAl
 from scipy import signal # signal processing tools
 
 
-def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
+def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams,iCh):
     """Reconstitutes a single-channel block of encoded data into a block of
     signed-fraction data based on the parameters in a PACFile object"""
 
@@ -46,7 +46,7 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
         ### SBR Decoder Module 2 - Additional High Frequency Components ###
         mdctLine = AddHiFreqs(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
         ### SBR Decoder Module 3 - Envelope Adjustment ###
-        mdctLine = EnvAdjust(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff,codingParams.specEnv)
+        mdctLine = EnvAdjust(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff,codingParams.specEnv[iCh])
         # print codingParams.specEnv # Print envelope for debugging purposes
 
     # IMDCT and window the data for this channel
@@ -66,7 +66,7 @@ def Encode(data,codingParams):
 
     # loop over channels and separately encode each one
     for iCh in range(codingParams.nChannels):
-        (s,b,m,o) = EncodeSingleChannel(data[iCh],codingParams)
+        (s,b,m,o) = EncodeSingleChannel(data[iCh],codingParams,iCh)
         scaleFactor.append(s)
         bitAlloc.append(b)
         mantissa.append(m)
@@ -75,7 +75,7 @@ def Encode(data,codingParams):
     return (scaleFactor,bitAlloc,mantissa,overallScaleFactor)
 
 
-def EncodeSingleChannel(data,codingParams):
+def EncodeSingleChannel(data,codingParams,iCh):
     """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
 
     # prepare various constants
@@ -96,19 +96,18 @@ def EncodeSingleChannel(data,codingParams):
     if codingParams.doSBR == True:
         # Calculate Spectral Envelope based on original signal
         specEnv = calcSpecEnv(data,codingParams.sbrCutoff,codingParams.sampleRate)
-        # Append in spectral envelope to empty container
-        codingParams.specEnv = specEnv
+        # Append in spectral envelope for this channel into empty container
+        codingParams.specEnv[iCh][:] = specEnv
+
+        #Decimate and lowpass signal by factor determined by cutoff frequency
+        doDecimate = False
+        if doDecimate==True:
+            Wc = codingParams.sbrCutoff/float(codingParams.sampleRate/2.)# Normalized cutoff frequency
+            b,a = signal.butter(4,Wn)
+            data = signal.lfilter(b,a,data)
 
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data
-
-    #Decimate and lowpass signal by factor determined by cutoff frequency
-    doDecimate = False
-    #TODO: grab previous and next block for filtering
-    if doDecimate==True:
-        Wc = codingParams.sbrCutoff/float(codingParams.sampleRate/2.)# Normalized cutoff frequency
-        b,a = signal.butter(4,Wn)
-        data = signal.lfilter(b,a,data)
 
     mdctTimeSamples = SineWindow(data)
     mdctLines = MDCT(mdctTimeSamples, halfN, halfN)[:halfN]
@@ -126,10 +125,9 @@ def EncodeSingleChannel(data,codingParams):
         # Critical band starting here are above cutoff
         cutBin = freqToBand(codingParams.sbrCutoff)
         # perform bit allocation using SMR results
-        # print 'cutBin: ',cutBin,'nBands: ',sfBands.nBands,'nLines: ',sfBands.nLines
         bitAlloc = BitAllocSBR(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs,cutBin)
     else:
-        bilAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
+        bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
 
     # given the bit allocations, quantize the mdct lines in each band
     scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)

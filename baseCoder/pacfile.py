@@ -144,7 +144,7 @@ class PACFile(AudioFile):
         myParams.sbrCutoff = 9500. # Specified in Hz
         myParams.doSBR = True # For toggling SBR algorithm
         myParams.nSpecEnvBits = 8 # number of bits per spectral envelope band
-        myParams.specEnv = np.zeros(24-codec.freqToBand(myParams.sbrCutoff))
+        myParams.specEnv = np.zeros((nChannels,24-codec.freqToBand(myParams.sbrCutoff)))
 
         # add in scale factor band information
         myParams.sfBands =sfBands
@@ -203,16 +203,15 @@ class PACFile(AudioFile):
             # CUSTOM DATA:
             # < now can unpack any custom data passed in the nBytes of data >
             # Grab each spectral envelope value and dequantize
-            codingParams.spectralEnv = np.zeros(25-(codec.freqToBand(codingParams.sbrCutoff)+1))
-            for i in range(len(codingParams.specEnv)):
+            for i in range(len(codingParams.specEnv[iCh])):
                 envScale = pb.ReadBits(codingParams.nScaleBits)
                 envMant = pb.ReadBits(codingParams.nScaleBits) # Sitcking with 4
                 # Dequantize this band of spectral envelope
-                codingParams.specEnv[i] = codec.DequantizeFP(envScale,envMant,\
+                codingParams.specEnv[iCh][i] = codec.DequantizeFP(envScale,envMant,\
                                 codingParams.nScaleBits,codingParams.nScaleBits)
 
             # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
-            decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
+            decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams,iCh)
             data[iCh] = np.concatenate( (data[iCh],np.add(codingParams.overlapAndAdd[iCh],decodedData[:codingParams.nMDCTLines]) ) )  # data[iCh] is overlap-and-added data
             codingParams.overlapAndAdd[iCh] = decodedData[codingParams.nMDCTLines:]  # save other half for next pass
 
@@ -284,7 +283,8 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can add space for custom data, if desired>
-            nBytes += codingParams.nSpecEnvBits*len(codingParams.specEnv) # Bits in spectral Env itself
+            # Bits for spectral envelope of each channel
+            nBytes += codingParams.nSpecEnvBits*len(codingParams.specEnv[iCh])
 
             # now convert the bits to bytes (w/ extra one if spillover beyond byte boundary)
             if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
@@ -311,11 +311,11 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can add in custom data if space allocated in nBytes above>
-            for i in range(len(codingParams.specEnv)):
-                envScale = codec.ScaleFactor(codingParams.specEnv[i],codingParams.nScaleBits,4)
+            for i in range(len(codingParams.specEnv[iCh])):
+                envScale = codec.ScaleFactor(codingParams.specEnv[iCh][i],codingParams.nScaleBits,4)
                 pb.WriteBits(envScale,codingParams.nScaleBits)
                 # Hardcoding 4 Mantissa bits, using floating-point to quantize
-                pb.WriteBits(codec.MantissaFP(codingParams.specEnv[i],envScale,codingParams.nScaleBits,4),codingParams.nScaleBits)
+                pb.WriteBits(codec.MantissaFP(codingParams.specEnv[iCh][i],envScale,codingParams.nScaleBits,4),codingParams.nScaleBits)
 
             # finally, write the data in this channel's PackedBits object to the output file
             self.fp.write(pb.GetPackedData())
@@ -345,13 +345,13 @@ class PACFile(AudioFile):
         #Passes encoding logic to the Encode function defined in the codec module
         return codec.Encode(data,codingParams)
 
-    def Decode(self,scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams):
+    def Decode(self,scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams,iCh):
         """
         Decodes a single audio channel of data based on the values of its scale factors,
         bit allocations, quantized mantissas, and overall scale factor.
         """
         #Passes decoding logic to the Decode function defined in the codec module
-        return codec.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
+        return codec.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams,iCh)
 
 
 
@@ -376,6 +376,7 @@ if __name__=="__main__":
     data_rate = 64000. # User defined data rate in bits/s/ch
     nSpecEnvBits = 8 # number of bits per spectral envelope band
     cutoff = 9500 # Global SBR cutoff
+    doSBR = True
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
@@ -418,10 +419,9 @@ if __name__=="__main__":
             codingParams.nSamplesPerBlock = codingParams.nMDCTLines
             # SBR related stuff
             codingParams.sbrCutoff = cutoff # Specified in Hz
-            codingParams.doSBR = True # For toggling SBR algorithm
+            codingParams.doSBR = doSBR # For toggling SBR algorithm
             codingParams.nSpecEnvBits = nSpecEnvBits # Bits per band in spectral envelope
-            codingParams.specEnv  = np.zeros(24-codec.freqToBand(codingParams.sbrCutoff))
-
+            codingParams.specEnv  = np.zeros((codingParams.nChannels,24-codec.freqToBand(codingParams.sbrCutoff)))
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16
