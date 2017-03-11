@@ -258,8 +258,7 @@ def DetectTransient(data, codingParams):
     thresh = getMaskedThreshold(data,MDCTdata,0,fs,ScaleFactorBands(AssignMDCTLinesFromFreqLimits(MDCTdata.size,fs)))
     PE = np.sum(np.log2(1+np.sqrt(Intensity(sineDB)/(Intensity(sineDB-thresh)))))/(MDCTdata.size)
     delta = (PE - codingParams.prevPE)
-    #if(codingParams.prevPE == -10): DT = False
-    print delta
+    # print delta # debug print to check PE change between blocks
     DT = delta > 1
     #print PE
     codingParams.prevPE = PE
