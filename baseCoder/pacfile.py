@@ -140,8 +140,12 @@ class PACFile(AudioFile):
         myParams.nMDCTLines = myParams.nSamplesPerBlock = nMDCTLines
         myParams.nScaleBits = nScaleBits
         myParams.nMantSizeBits = nMantSizeBits
-        myParams.sbrCutoff = 9000. # Specified in Hz
-        myParams.doSBR = True
+        # SBR Stuff
+        myParams.sbrCutoff = 9500. # Specified in Hz
+        myParams.doSBR = True # For toggling SBR algorithm
+        myParams.nSpecEnvBits = 8 # number of bits per spectral envelope band
+        myParams.specEnv = np.zeros(24-codec.freqToBand(myParams.sbrCutoff))
+
         # add in scale factor band information
         myParams.sfBands =sfBands
         # start w/o all zeroes as data from prior block to overlap-and-add for output
@@ -198,6 +202,14 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can unpack any custom data passed in the nBytes of data >
+            # Grab each spectral envelope value and dequantize
+            codingParams.spectralEnv = np.zeros(25-(codec.freqToBand(codingParams.sbrCutoff)+1))
+            for i in range(len(codingParams.specEnv)):
+                envScale = pb.ReadBits(codingParams.nScaleBits)
+                envMant = pb.ReadBits(codingParams.nScaleBits) # Sitcking with 4
+                # Dequantize this band of spectral envelope
+                codingParams.specEnv[i] = codec.DequantizeFP(envScale,envMant,\
+                                codingParams.nScaleBits,codingParams.nScaleBits)
 
             # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
             decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
@@ -272,6 +284,7 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can add space for custom data, if desired>
+            nBytes += codingParams.nSpecEnvBits*len(codingParams.specEnv) # Bits in spectral Env itself
 
             # now convert the bits to bytes (w/ extra one if spillover beyond byte boundary)
             if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
@@ -298,6 +311,11 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can add in custom data if space allocated in nBytes above>
+            for i in range(len(codingParams.specEnv)):
+                envScale = codec.ScaleFactor(codingParams.specEnv[i],codingParams.nScaleBits,4)
+                pb.WriteBits(envScale,codingParams.nScaleBits)
+                # Hardcoding 4 Mantissa bits, using floating-point to quantize
+                pb.WriteBits(codec.MantissaFP(codingParams.specEnv[i],envScale,codingParams.nScaleBits,4),codingParams.nScaleBits)
 
             # finally, write the data in this channel's PackedBits object to the output file
             self.fp.write(pb.GetPackedData())
@@ -354,8 +372,10 @@ if __name__=="__main__":
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
     input_filename = "sbrTest.wav"
     coded_filename = "coded.pac"
-    output_filename = "sbrTest_128kbps.wav"
-    data_rate = 128000. # User defined data rate in bits/s/ch
+    output_filename = "sbrTest_64kbps.wav"
+    data_rate = 64000. # User defined data rate in bits/s/ch
+    nSpecEnvBits = 8 # number of bits per spectral envelope band
+    cutoff = 9500 # Global SBR cutoff
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
@@ -397,8 +417,10 @@ if __name__=="__main__":
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = codingParams.nMDCTLines
             # SBR related stuff
-            codingParams.sbrCutoff = 9000. # Specified in Hz
+            codingParams.sbrCutoff = cutoff # Specified in Hz
             codingParams.doSBR = True # For toggling SBR algorithm
+            codingParams.nSpecEnvBits = nSpecEnvBits # Bits per band in spectral envelope
+            codingParams.specEnv  = np.zeros(24-codec.freqToBand(codingParams.sbrCutoff))
 
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
