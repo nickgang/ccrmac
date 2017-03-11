@@ -104,11 +104,16 @@ Description of the PAC File Format:
 from audiofile import * # base class
 from bitpack import *  # class for packing data into an array of bytes where each item's number of bits is specified
 import codec    # module where the actual PAC coding functions reside(this module only specifies the PAC file format)
-from psychoac import ScaleFactorBands, AssignMDCTLinesFromFreqLimits  # defines the grouping of MDCT lines into scale factor bands
+from psychoac import ScaleFactorBands, AssignMDCTLinesFromFreqLimits, DetectTransient  # defines the grouping of MDCT lines into scale factor bands
 import sys
+import matplotlib.pyplot as plt
 
 import numpy as np  # to allow conversion of data blocks to numpy's array object
 MAX16BITS = 32767
+SHORTBLOCKSIZE = 256
+LONGBLOCKSIZE = 2048
+
+shortFreqLimits = np.array([300,630,1080,1720,2700,4400,7700,15500])
 
 class PACFile(AudioFile):
     """
@@ -140,7 +145,9 @@ class PACFile(AudioFile):
         myParams.nMDCTLines = myParams.nSamplesPerBlock = nMDCTLines
         myParams.nScaleBits = nScaleBits
         myParams.nMantSizeBits = nMantSizeBits
+        myParams.blocksize = 0 # 0-3 to indicate which blocktype
         myParams.sbrCutoff = sampleRate/4 # Hardcoding to half spectrum for now
+        # need param to indicate block switching used
         # add in scale factor band information
         myParams.sfBands =sfBands
         # start w/o all zeroes as data from prior block to overlap-and-add for output
@@ -178,31 +185,77 @@ class PACFile(AudioFile):
             if pb.nBytes < nBytes:  raise "Only read a partial block of coded PACFile data"
 
             # extract the data from the PackedBits object
+            # get BlockType / Size data
+            codingParams.blocksize = pb.ReadBits(2)
+            #print "Read blocksize: ", codingParams.blocksize
             overallScaleFactor = pb.ReadBits(codingParams.nScaleBits)  # overall scale factor
+            #print "Read overallScaleFactor: ", overallScaleFactor 
             scaleFactor=[]
             bitAlloc=[]
+            if(codingParams.blocksize == 0):
+                codingParams.nMDCTLines = LONGBLOCKSIZE/2
+            elif(codingParams.blocksize % 2 == 1):
+                codingParams.nMDCTLines = (LONGBLOCKSIZE+SHORTBLOCKSIZE)/4
+            elif(codingParams.blocksize == 2):
+                codingParams.nMDCTLines = SHORTBLOCKSIZE/2
+
+            #print codingParams.nMDCTLines
             mantissa=np.zeros(codingParams.nMDCTLines,np.int32)  # start w/ all mantissas zero
+            
+            # Determine ScaleFactorBands for blocksize
+            if(codingParams.blocksize != 2):
+                codingParams.sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(codingParams.nMDCTLines,
+                                                             codingParams.sampleRate))            
+            else:
+                codingParams.sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(codingParams.nMDCTLines,
+                                                             codingParams.sampleRate, shortFreqLimits))
+            #print codingParams.sfBands.nLines
             for iBand in range(codingParams.sfBands.nBands): # loop over each scale factor band to pack its data
                 ba = pb.ReadBits(codingParams.nMantSizeBits)
                 if ba: ba+=1  # no bit allocation of 1 so ba of 2 and up stored as one less
+                #print "ba for Band: ", iBand, ": ", ba
                 bitAlloc.append(ba)  # bit allocation for this band
                 scaleFactor.append(pb.ReadBits(codingParams.nScaleBits))  # scale factor for this band
                 if bitAlloc[iBand]:
                     # if bits allocated, extract those mantissas and put in correct location in matnissa array
                     m=np.empty(codingParams.sfBands.nLines[iBand],np.int32)
-                    for j in range(codingParams.sfBands.nLines[iBand]):
+                    #print "Band mantissas: ", m.size
+                    #print "mantissa bits this band: ", m.size*bitAlloc[iBand]
+                    for j in range(m.size):
                         m[j]=pb.ReadBits(bitAlloc[iBand])     # mantissas for this band (if bit allocation non-zero) and bit alloc <>1 so encoded as 1 lower than actual allocation
                     mantissa[codingParams.sfBands.lowerLine[iBand]:(codingParams.sfBands.upperLine[iBand]+1)] = m
             # done unpacking data (end loop over scale factor bands)
 
             # CUSTOM DATA:
             # < now can unpack any custom data passed in the nBytes of data >
+            
 
             # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
             decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
-            data[iCh] = np.concatenate( (data[iCh],np.add(codingParams.overlapAndAdd[iCh],decodedData[:codingParams.nMDCTLines]) ) )  # data[iCh] is overlap-and-added data
-            codingParams.overlapAndAdd[iCh] = decodedData[codingParams.nMDCTLines:]  # save other half for next pass
-
+            if(codingParams.blocksize == 3):
+                #print "MDCTLines: ", codingParams.nMDCTLines
+                a = LONGBLOCKSIZE/2
+                b = SHORTBLOCKSIZE/2
+            elif (codingParams.blocksize == 2):
+                a = SHORTBLOCKSIZE/2
+                b = a
+            elif (codingParams.blocksize == 1):
+                b = LONGBLOCKSIZE/2
+                a = SHORTBLOCKSIZE/2
+            else:
+                a = LONGBLOCKSIZE/2
+                b = a
+            N = a+b
+            halfN = N/2
+            #print "A: ", a
+            #print "B: ", b
+            #print "Old OVA: ", codingParams.overlapAndAdd[iCh].size
+            #print "Decoded Data: ", decodedData.size
+            
+            data[iCh] = np.concatenate( (data[iCh],np.add(codingParams.overlapAndAdd[iCh],decodedData[:a]) ) )  # data[iCh] is overlap-and-added data
+            
+            codingParams.overlapAndAdd[iCh] = decodedData[a:]  # save other half for next pass
+            #print "New OVA: ", codingParams.overlapAndAdd[iCh].size
         # end loop over channels, return signed-fraction samples for this block
         return data
 
@@ -228,11 +281,11 @@ class PACFile(AudioFile):
             codingParams.sampleRate, codingParams.nChannels,
             codingParams.numSamples, codingParams.nMDCTLines,
             codingParams.nScaleBits, codingParams.nMantSizeBits  ))
+        # NEW add param for blockSize switching used
         # create a ScaleFactorBand object to be used by the encoding process and write its info to header
-        sfBands=ScaleFactorBands( AssignMDCTLinesFromFreqLimits(codingParams.nMDCTLines,
-                                                                codingParams.sampleRate)
-                                )
-        codingParams.sfBands=sfBands
+        sfBands = ScaleFactorBands( AssignMDCTLinesFromFreqLimits(codingParams.nMDCTLines,
+                                                                codingParams.sampleRate))
+        codingParams.sfBands = sfBands
         self.fp.write(pack('<L',sfBands.nBands))
         self.fp.write(pack('<'+str(sfBands.nBands)+'H',*(sfBands.nLines.tolist()) ))
         # start w/o all zeroes as prior block of unencoded data for other half of MDCT block
@@ -250,16 +303,18 @@ class PACFile(AudioFile):
 
         # combine this block of multi-channel data w/ the prior block's to prepare for MDCTs twice as long
         fullBlockData=[]
+        #print "Using priorBlock: ",len(codingParams.priorBlock[0])
+        #print len(data[0]), "\n"
         for iCh in range(codingParams.nChannels):
             fullBlockData.append( np.concatenate( ( codingParams.priorBlock[iCh], data[iCh]) ) )
-        codingParams.priorBlock = data  # current pass's data is next pass's prior block data
-
+            codingParams.priorBlock[iCh] = np.copy(data[iCh])  # current pass's data is next pass's prior block data
+        #print "Setting priorBlock: ",len(codingParams.priorBlock[0]),"\n"
         # (ENCODE HERE) Encode the full block of multi=channel data
         (scaleFactor,bitAlloc,mantissa, overallScaleFactor) = self.Encode(fullBlockData,codingParams)  # returns a tuple with all the block-specific info not in the file header
 
         # for each channel, write the data to the output file
         for iCh in range(codingParams.nChannels):
-
+            #print bitAlloc[iCh]
             # determine the size of this channel's data block and write it to the output file
             nBytes = codingParams.nScaleBits  # bits for overall scale factor
             for iBand in range(codingParams.sfBands.nBands): # loop over each scale factor band to get its bits
@@ -271,6 +326,10 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can add space for custom data, if desired>
+            
+            # add two bits for block size if using blockswitching
+            #if (BSFlag):
+            nBytes += 2  # for blocksize ID
 
             # now convert the bits to bytes (w/ extra one if spillover beyond byte boundary)
             if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
@@ -282,6 +341,8 @@ class PACFile(AudioFile):
             pb.Size(nBytes)
 
             # now pack the nBytes of data into the PackedBits object
+            # NEW: Block size data
+            pb.WriteBits(codingParams.blocksize,2)
             pb.WriteBits(overallScaleFactor[iCh],codingParams.nScaleBits)  # overall scale factor
             iMant=0  # index offset in mantissa array (because mantissas w/ zero bits are omitted)
             for iBand in range(codingParams.sfBands.nBands): # loop over each scale factor band to pack its data
@@ -297,6 +358,7 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can add in custom data if space allocated in nBytes above>
+            
 
             # finally, write the data in this channel's PackedBits object to the output file
             self.fp.write(pb.GetPackedData())
@@ -349,10 +411,14 @@ if __name__=="__main__":
     import sys
     import time
     from pcmfile import * # to get access to WAV file handling
+    
+    graph = np.zeros(40960)
+    trans = np.zeros(81)
+    pes = np.zeros(81)
 
-    input_filename = "sbrTest.wav"
+    input_filename = "Castanets.wav"
     coded_filename = "coded.pac"
-    output_filename = "sbrTest_128kbps.wav"
+    output_filename = "castnewblocktest2.wav"
     data_rate = 128000. # User defined data rate in bits/s/ch
 
     if len(sys.argv) > 1:
@@ -365,7 +431,7 @@ if __name__=="__main__":
     elapsed = time.time()
 
     for Direction in ("Encode", "Decode"):
-#    for Direction in ("Decode"):
+ #   for Direction in ("Decode"):
 
         # create the audio file objects
         if Direction == "Encode":
@@ -385,15 +451,19 @@ if __name__=="__main__":
         if Direction == "Encode":
             # set additional parameters that are needed for PAC file
             # (beyond those set by the PCM file on open)
-            codingParams.nMDCTLines = 512
-            K = 2*codingParams.nMDCTLines # Number of input samples/block
-            codingParams.nScaleBits = 3
+            codingParams.nMDCTLines = 1024
+            #K = 2*codingParams.nMDCTLines # Number of input samples/block
+            codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
+            codingParams.prevPE = 10
             # Calculate target bits/line based on Fs and data rate
-            codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*\
-                                                K) - 204)/K
+           # codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*\
+            #                                    K) - 204)/K
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = codingParams.nMDCTLines
+            
+            c = 0
+            
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16
@@ -405,18 +475,105 @@ if __name__=="__main__":
 
         # Read the input file and pass its data to the output file to be written
         firstBlock = True  # when de-coding, we won't write the first block to the PCM file. This flag signifies that
+        nextData = []
+        data = [[] for x in range(codingParams.nChannels)]
         while True:
-            data=inFile.ReadDataBlock(codingParams)
-            if not data: break  # we hit the end of the input file
+            
+            # if blocksize = 3(long-short), only possible next blocksize = 2(short-short)
+            #print "priorBlock top of loop: ",len(codingParams.priorBlock[0])
+            
+            
+            # only read new large block if previous block was long or nextData used up
+            
+            # If encoding set blocksize, detect transients if new block, set K for targetBits, determine if 
+            # new data or nextData used
+            if(Direction == "Encode"):
+                newBlock = False
+                if(codingParams.blocksize < 2 or (codingParams.blocksize > 1 and len(nextData[0]) < SHORTBLOCKSIZE/2)):
+                    nextData = inFile.ReadDataBlock(codingParams)
+                    newBlock = True
+                    if not nextData: break # end of file
+                    # detect Transient, set next window shape
+                    # 0 = long long, 1 = short long, 2 = short short, 3 = long short
+                # Maybe add >2 channel transient detection
+                if(codingParams.blocksize == 3):
+                    codingParams.blocksize = 2
+                    K = codingParams.nMDCTLines*(2* float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
+                    #codingParams.nScaleBits = 3
+                    #codingParams.nMantSizeBits = 3
+                elif (len(data[0]) != 0 and newBlock and (DetectTransient(nextData[0],codingParams) or DetectTransient(nextData[1], codingParams))):
+                    if(codingParams.blocksize < 2):
+                        codingParams.blocksize = 3
+                        K = codingParams.nMDCTLines*(1 + float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
+                        #codingParams.nScaleBits = 4
+                        #codingParams.nMantSizeBits = 4
+                    else:
+                        codingParams.blocksize = 2;
+                        K = codingParams.nMDCTLines*(2* float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
+                        #codingParams.nScaleBits = 3
+                        #codingParams.nMantSizeBits = 3
+                elif (newBlock):
+                    if(codingParams.blocksize < 2):
+                        codingParams.blocksize = 0
+                        K = codingParams.nMDCTLines*2
+                        #codingParams.nScaleBits = 4
+                        #codingParams.nMantSizeBits = 4
+                    else:
+                        codingParams.blocksize = 1
+                        K = codingParams.nMDCTLines*(1 + float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
+                        #codingParams.nScaleBits = 4
+                        #codingParams.nMantSizeBits = 4
+            
+                #print codingParams.blocksize
+                #print nextData[0][SHORTBLOCKSIZE/2:]
+                # get correct amount of sample data
+                #print "priorBlock before data set: ",len(codingParams.priorBlock[0])
+                if(codingParams.blocksize > 1):                    
+                    for iCh in range(codingParams.nChannels):
+                        data[iCh] = nextData [iCh][:SHORTBLOCKSIZE/2]
+                        nextData[iCh] = nextData [iCh][SHORTBLOCKSIZE/2:]
+                else:
+                    data = nextData
+                
+                #print "priorBlock data set: ",len(codingParams.priorBlock[0])
+                if(codingParams.blocksize != 2):
+                    sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(K/2, codingParams.sampleRate))
+                else:
+                    sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(K/2, codingParams.sampleRate, shortFreqLimits))
+                codingParams.sfBands=sfBands
+                
+                # set targetBitsPerSample
+                codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*\
+                                                    K) - (6+codingParams.sfBands.nBands*\
+                                                    (codingParams.nScaleBits+codingParams.nMantSizeBits)))/K
+                #codingParams.targetBitsPerSample = 16    
+                #print codingParams.targetBitsPerSample
+            else:
+                data = inFile.ReadDataBlock(codingParams)
+            
+            if not data: 
+                break # we hit the end of the input file
+#            if Direction == "Encode" and c < 80:
+#                graph[c*1024:(c+1)*1024] = data[0]
+#                c +=1
+#                
+#                if (DetectTransient(data[0])):
+#                    print "Transient detected! \n"
+#                    pes[c] = 1
+#                    trans[c] = 1
 
             # don't write the first PCM block (it corresponds to the half-block delay introduced by the MDCT)
             if firstBlock and Direction == "Decode":
                 firstBlock = False
                 continue
-
+            
+            #print "PacFile priorBlock: ",len(codingParams.priorBlock[0])
+            #print "current block: ",len(data[0]), "\n"
+            
             outFile.WriteDataBlock(data,codingParams)
             sys.stdout.write(".")  # just to signal how far we've gotten to user
             sys.stdout.flush()
+            
         # end loop over reading/writing the blocks
 
         # close the files
@@ -427,3 +584,8 @@ if __name__=="__main__":
     elapsed = time.time()-elapsed
     print "\nDone with Encode/Decode test\n"
     print elapsed ," seconds elapsed"
+    plt.plot(graph)
+    tx = np.arange(81)*512
+    plt.plot(tx, trans)
+    plt.show()
+    print pes

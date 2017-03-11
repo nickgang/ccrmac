@@ -1,5 +1,5 @@
 import numpy as np
-# import psychoac_ as p
+#import psychoac_ as p
 from mdct import *
 from window import *
 import matplotlib.pyplot as plt
@@ -113,6 +113,10 @@ def AssignMDCTLinesFromFreqLimits(nMDCTLines, sampleRate, flimit = cbFreqLimits)
             nInScaleBand[i] = np.nonzero(MDCTLines<=flimit[i])[i].size
         else:
             nInScaleBand[i] = np.intersect1d(np.nonzero(MDCTLines>flimit[i-1]),np.nonzero(MDCTLines<=flimit[i])).size
+#    for i in range(nInScaleBand.size):
+#        if (nInScaleBand[i] == 0):
+#            nInScaleBand[i] = 1
+#            nInScaleBand[nInScaleBand.size-1] -= 1
 
     return nInScaleBand
 
@@ -232,15 +236,50 @@ def CalcSMRs(data, MDCTdata, MDCTscale, sampleRate, sfBands):
     sineWin = (1/float(N))*np.sum(np.power(SineWindow(np.ones_like(data)),2)) # Get avg pow of KBD window
     sineDB = SPL((2/(sineWin))*(np.power(np.absolute(MDCTdata),2.)))# Find dB SPL of MDCT values
 
-
+    #print sineDB.size
+    #print maskThresh.size
+    
     smrVec = sineDB - maskThresh # This gives SMR for every MDCT line individually
+    #print sfBands.lowerLine, sfBands.upperLine, "\n"
+    #print smrVec, "\n"
+    #print smrVec.size, "\n"
     SMR = np.zeros(sfBands.nBands)
 
     for i in range(sfBands.nBands):
-        SMR[i] = np.max(smrVec[sfBands.lowerLine[i]:sfBands.upperLine[i]+1]) # Look at max SMR in this critical band
-
+        
+        if(sfBands.upperLine[i]-(sfBands.lowerLine[i]) > 0):
+            SMR[i] = np.max(smrVec[sfBands.lowerLine[i]:sfBands.upperLine[i]+1]) # Look at max SMR in this critical band
+        else:
+            SMR[i] = smrVec[sfBands.lowerLine[i]]
     return SMR
 
+def CalcPE(maskThresh, MDCTdata, MDCTscale):  
+    MDCTdata = MDCTdata*np.power(2,float(-1*MDCTscale)) # Remove scale factor
+    M = MDCTdata.size
+    #print M
+    #print maskThresh.size
+    PE = np.sum(np.log2(1+np.sqrt(Intensity(MDCTdata)/Intensity(maskThresh))))/M
+    #print PE, "\n"
+    return PE
+    #pass
+    
+def DetectTransient(data, codingParams):
+    fs = 48000
+    #fs = codingParams.sampleRate
+    N = data.size
+    MDCTdata = MDCT(SineWindow(data),N/2,N/2)
+    sineWin = (1/float(N))*np.sum(np.power(SineWindow(np.ones_like(data)),2)) # Get avg pow of KBD window
+    sineDB = SPL((2/(sineWin))*(np.power(np.absolute(MDCTdata),2.)))# Find dB SPL of MDCT values
+    thresh = getMaskedThreshold(data,MDCTdata,0,fs,ScaleFactorBands(AssignMDCTLinesFromFreqLimits(MDCTdata.size,fs)))
+    PE = np.sum(np.log2(1+np.sqrt(Intensity(sineDB)/(Intensity(sineDB-thresh)))))/(MDCTdata.size)
+    delta = (PE - codingParams.prevPE)
+    #if(codingParams.prevPE == -10): DT = False
+    print delta
+    DT = delta > 1
+    #print PE
+    codingParams.prevPE = PE
+    return (DT)
+    
 #-----------------------------------------------------------------------------
 
 #Testing code
@@ -437,9 +476,9 @@ if __name__ == "__main__":
         sfBands.upperLine = sfBands.upperLine.astype(int)
 
         SMR = CalcSMRs(xn,MDCTdata,MDCTscale,fs,sfBands)
-        pSMR = p.CalcSMRs(xn,MDCTdata,MDCTscale,fs,sfBands)
+        #pSMR = p.CalcSMRs(xn,MDCTdata,MDCTscale,fs,sfBands)
         thresh = getMaskedThreshold(xn,MDCTdata,MDCTscale,fs,sfBands)
-        pThresh = p.getMaskedThreshold(xn,MDCTdata,MDCTscale,fs,sfBands)
+        #pThresh = p.getMaskedThreshold(xn,MDCTdata,MDCTscale,fs,sfBands)
 
         plt.figure(1)
         plt.semilogx(freqVec,thresh,lw=3,label='Masking Threshold')
@@ -457,7 +496,7 @@ if __name__ == "__main__":
         a.axis('tight')
         a.legend()
         plt.rcParams['figure.figsize'] = (12.0, 8.0)
-
+        plt.show()
 #         plt.figure(2)
 #         plt.plot(SMR,label='Mine')
 #         plt.hold(True)
@@ -466,6 +505,29 @@ if __name__ == "__main__":
 #         a.legend()
 
         print 'SMR: ',np.round(SMR,4)
-
+        
+        print 'PE: ', CalcPE(thresh, MDCTdata, MDCTscale)
+        #testNoise = np.ones_like(MDCTdata)
+        testNoise = np.random.rand(MDCTdata.size*2)*2-1
+        #print 'PE Noise: ', CalcPE(getMaskedThreshold(testNoise,MDCT(SineWindow(testNoise),N/2,N/2),0,fs,sfBands), testNoise[:N/4], 0)
+        testQuiet = np.zeros_like(testNoise)
+        #print 'PE Quiet: ', CalcPE(getMaskedThreshold(testQuiet,MDCT(SineWindow(testQuiet),N/2,N/2),0,fs,sfBands), testQuiet[:N/4], 0)
+        print 'DT Noise: ', DetectTransient(testNoise)
+        noisethresh = getMaskedThreshold(testNoise,MDCT(SineWindow(testNoise),N/2,N/2),0,fs,sfBands)
+        print 'DT Quiet: ', DetectTransient(testQuiet)
+        quietthresh = getMaskedThreshold(testQuiet,MDCT(SineWindow(testQuiet),N/2,N/2),0,fs,sfBands)
+        
+        mdctNoise = MDCT(SineWindow(testNoise),N/2,N/2)
+        noisedB = SPL((2/(sineWin))*(np.power(mdctNoise,2.)))
+        plt.semilogx(freqVec+fs/float(2*N),noisedB)
+        plt.semilogx(freqVec,noisethresh)
+        plt.show()
+        
+        mdctquiet = MDCT(SineWindow(testQuiet),N/2,N/2)
+        quietdB = SPL((2/(sineWin))*(np.power(mdctquiet,2.)))
+        plt.semilogx(freqVec+fs/float(2*N),quietdB)
+        plt.semilogx(freqVec,quietthresh)
+        plt.show()
+        
     if part=='h':
         pass

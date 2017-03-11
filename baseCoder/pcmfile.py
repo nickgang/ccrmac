@@ -61,10 +61,14 @@ class PCMFile(AudioFile):
         myParams.sampleRate = sampleRate # sample rate in Hz (e.g. 44100.)
         myParams.numSamples = numSamples # total number of samples in file (per channel)
         myParams.bytesReadSoFar = 0
+        myParams.blocksize = 0 # 0-3 indicates blocksize type
         return myParams
 
     def ReadDataBlock(self,codingParams):
         """Reads a block of data from a PCMFile object that has already executed OpenForReading and returns those samples as signed-fraction data"""
+        
+        
+        
         # read a block of nSamplesPerBlock*nChannels*bytesPerSample bytes from the file (where nSamples is set by coding file before reading)
         bytesToRead = codingParams.nSamplesPerBlock*codingParams.nChannels*(codingParams.bitsPerSample/BYTESIZE)
         if codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar <= 0:
@@ -73,6 +77,7 @@ class PCMFile(AudioFile):
             dataBlock = self.fp.read(codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar)
         else:
             dataBlock = self.fp.read(bytesToRead)
+            
         codingParams.bytesReadSoFar += bytesToRead
         if dataBlock and len(dataBlock)<bytesToRead:  # got data but not as much as expected
             # this was a partial block, zero pad
@@ -152,7 +157,7 @@ class PCMFile(AudioFile):
 if __name__=="__main__":
 
     # create the audio file objects of the appropriate audioFile type
-    inFile= PCMFile("input.wav")
+    inFile= PCMFile("Castanets.wav")
     outFile = PCMFile("output.wav")
 
     # open input file and get its coding parameters

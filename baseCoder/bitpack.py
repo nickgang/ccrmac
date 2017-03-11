@@ -113,6 +113,7 @@ class PackedBits:
         #compute mask to extract these bits from data
         dataMask = (((1<<nCur)-1)<<(BYTESIZE-self.iBit-nCur) )
         # extract the bit pattern
+        #print self.iBit+self.iByte*8
         dataMask &= self.data[self.iByte]  # now it has nCur bits from data starting at iBit
         # shift to right location for info
         if bitsLeft>BYTESIZE-self.iBit:
