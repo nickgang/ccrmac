@@ -323,12 +323,3 @@ def vDequantize(scale, mantissaVec, nScaleBits=3, nMantBits=5):
     return aNumVec
 
 #-----------------------------------------------------------------------------
-
-#Testing code
-if __name__ == "__main__":
-
-    ### YOUR TESTING CODE STARTS HERE ###
-
-    pass
-
-    ### YOUR TESTING CODE ENDS HERE ###
