@@ -141,7 +141,7 @@ class PACFile(AudioFile):
         myParams.nScaleBits = nScaleBits
         myParams.nMantSizeBits = nMantSizeBits
         # SBR Stuff
-        myParams.sbrCutoff = 9500. # Specified in Hz
+        myParams.sbrCutoff = 5300. # Specified in Hz
         myParams.doSBR = True # For toggling SBR algorithm
         myParams.nSpecEnvBits = 8 # number of bits per spectral envelope band
         myParams.specEnv = np.zeros((nChannels,24-codec.freqToBand(myParams.sbrCutoff)))
@@ -370,12 +370,12 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "sbrTest.wav"
+    input_filename = "germ_trim.wav"
     coded_filename = "coded.pac"
-    output_filename = "sbrTest_64kbps.wav"
-    data_rate = 64000. # User defined data rate in bits/s/ch
+    data_rate = 48000. # User defined data rate in bits/s/ch
+    cutoff = 5300 # Global SBR cutoff
+    output_filename = "germ_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
-    cutoff = 9500 # Global SBR cutoff
     doSBR = True
 
     if len(sys.argv) > 1:
@@ -412,9 +412,6 @@ if __name__=="__main__":
             K = 2*codingParams.nMDCTLines # Number of input samples/block
             codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
-            # Calculate target bits/line based on Fs and data rate
-            codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*\
-                                                K) - 204)/K
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = codingParams.nMDCTLines
             # SBR related stuff
@@ -422,6 +419,9 @@ if __name__=="__main__":
             codingParams.doSBR = doSBR # For toggling SBR algorithm
             codingParams.nSpecEnvBits = nSpecEnvBits # Bits per band in spectral envelope
             codingParams.specEnv  = np.zeros((codingParams.nChannels,24-codec.freqToBand(codingParams.sbrCutoff)))
+            # Calculate target bits/line based on Fs and data rate
+            codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*K)\
+             - (204+len(codingParams.specEnv[0])*codingParams.nSpecEnvBits))/K
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16

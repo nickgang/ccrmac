@@ -42,7 +42,7 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams,iCh):
 
     if codingParams.doSBR == True:
         ### SBR Decoder Module 1 - High Frequency Reconstruction ###
-        mdctLine = HiFreqRec(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
+        mdctLine = HiFreqRec2(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
         ### SBR Decoder Module 2 - Additional High Frequency Components ###
         mdctLine = AddHiFreqs(mdctLine,codingParams.sampleRate,codingParams.sbrCutoff)
         ### SBR Decoder Module 3 - Envelope Adjustment ###
