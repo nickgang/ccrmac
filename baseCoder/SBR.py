@@ -17,16 +17,22 @@ def calcSpecEnv(data,cutoff,fs):
     # cutoff:    Cutoff frequency in Hz
     # fs:        Sampling rate in Hz
 
+    hfRecType = 2 # 1 for regular, 2 for altered algorithm that repeats top half of sub band
     N = data.size
     freqVec = np.arange(0,fs/2,fs/float(N)) # Vector of FFT bin frequencies
     Xn = np.fft.fft(w.HanningWindow(data),N)
     hannWin = (1/float(N))*np.sum(np.power(w.HanningWindow(np.ones_like(data)),2)) # Get avg pow of hann window
     XnI = (4/(np.power(N,2)*hannWin))*(np.power(np.abs(Xn),2)) # Compute values of FFT intensity
+    # Transpose down top half of subband if we're using altered alg
+    if hfRecType==2:
+        cutBin = freqToBinFFT(N,cutoff,fs)
+        XnI[0:np.floor(cutBin/2)] = XnI[np.floor(cutBin/2):cutBin]
 
     bandLimits = p.cbFreqLimits # Zwicker critical band upper limits
     cutBand = np.argwhere(bandLimits>=cutoff)[0] # Next band limit above cutoff freq
     nHfBands = len(bandLimits)-cutBand # How many bands will be reconstructed
     specEnv = np.zeros(nHfBands-1)
+
     for i in range(nHfBands-1):
         bandLines = np.intersect1d(np.argwhere(freqVec>bandLimits[cutBand+i]),\
                                    np.argwhere(freqVec<=bandLimits[cutBand+i+1]))
@@ -46,6 +52,15 @@ def HiFreqRec(mdctLines,fs,cutoff):
     nMDCT = len(mdctLines)
     cutBin = freqToBin(nMDCT,cutoff,fs)
     lowerBand = mdctLines[0:cutBin]
+    mdctLines[cutBin+1:cutBin+len(lowerBand)+1] = lowerBand # Do the transposition
+    return mdctLines.astype(float) # If these are ints it can cause problems
+
+# Alternate function, replicates top half of subband twice
+def HiFreqRec2(mdctLines,fs,cutoff):
+    nMDCT = len(mdctLines)
+    cutBin = freqToBin(nMDCT,cutoff,fs)
+    lowerBand = np.array(mdctLines[0:cutBin],copy=True)
+    lowerBand[0:np.floor(cutBin/2)] = lowerBand[np.floor(cutBin/2)+1:cutBin]
     mdctLines[cutBin+1:cutBin+len(lowerBand)+1] = lowerBand # Do the transposition
     return mdctLines.astype(float) # If these are ints it can cause problems
 
@@ -80,6 +95,13 @@ def freqToBin(nMDCT,cutoff,fs):
     N = 2*nMDCT
     freqVec = np.arange(0,fs/2,fs/float(N))+fs/float(2.*N) # MDCT Frequencies
     cutBin = np.argmin(np.absolute(freqVec-cutoff)) # Find index of cutoff frequency
+    return cutBin
+
+# Utility Function to Convert Cutoff Freq to FFT Bin Number
+def freqToBinFFT(nFFT,cutoff,fs):
+    N = nFFT
+    freqVec = np.arange(0,fs/2,fs/float(N)) # FFT freq vector
+    cutBin = np.argmin(np.absolute(freqVec-cutoff))
     return cutBin
 
 # Utility Function to Convert cutoff frequency to critical band index
