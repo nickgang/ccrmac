@@ -112,8 +112,10 @@ import numpy as np  # to allow conversion of data blocks to numpy's array object
 MAX16BITS = 32767
 SHORTBLOCKSIZE = 256
 LONGBLOCKSIZE = 2048
+COUPLINGSTART = 17
 
 shortFreqLimits = np.array([300,630,1080,1720,2700,4400,7700,15500])
+
 
 class PACFile(AudioFile):
     """
@@ -154,6 +156,8 @@ class PACFile(AudioFile):
         myParams.blocksize = 0 # 0-3 to indicate which blocktype
         # add in scale factor band information
         myParams.sfBands =sfBands
+        myParams.doCoupling = True
+        myParams.nCouplingStart = COUPLINGSTART
         # start w/o all zeroes as data from prior block to overlap-and-add for output
         overlapAndAdd = []
         for iCh in range(nChannels): overlapAndAdd.append( np.zeros(nMDCTLines, dtype=np.float64) )
@@ -169,6 +173,27 @@ class PACFile(AudioFile):
         """
         # loop over channels (whose coded data are stored separately) and read in each data block
         data=[]
+        scaleFactorFull = []
+        mantissaFull = []
+        bitAllocFull = []
+        overallScaleFactorFull = []
+        s=self.fp.read(calcsize("<L"))
+        codingParams.couplingParmas = []
+        if s:
+            nBytes = unpack("<L",s)[0]
+            #print nBytes
+            pb = PackedBits()
+            pb.SetPackedData(self.fp.read(nBytes))
+            if pb.nBytes < nBytes: raise "error with coupling params"
+            couplingParams  = []
+            for i in range(nBytes): #1+(25-codingParams.nCouplingStart)*codingParams.nChannels):
+                couplingScale = pb.ReadBits(codingParams.nScaleBits)
+                couplingMant = pb.ReadBits(codingParams.nScaleBits)
+                #print couplingScale,couplingMant
+                couplingParams.append(codec.DequantizeFP(couplingScale,couplingMant,\
+                                                 codingParams.nScaleBits,codingParams.nScaleBits))
+            codingParams.couplingParams = couplingParams
+
         for iCh in range(codingParams.nChannels):
             data.append(np.array([],dtype=np.float64))  # add location for this channel's data
             # read in string containing the number of bytes of data for this channel (but check if at end of file!)
@@ -234,27 +259,32 @@ class PACFile(AudioFile):
                 # Dequantize this band of spectral envelope
                 codingParams.specEnv[iCh][i] = codec.DequantizeFP(envScale,envMant,\
                                 codingParams.nScaleBits,codingParams.nScaleBits)
-
-            # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
-            decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams,iCh)
-            if(codingParams.blocksize == 3):
-                #print "MDCTLines: ", codingParams.nMDCTLines
-                a = LONGBLOCKSIZE/2
-                b = SHORTBLOCKSIZE/2
-            elif (codingParams.blocksize == 2):
-                a = SHORTBLOCKSIZE/2
-                b = a
-            elif (codingParams.blocksize == 1):
-                b = LONGBLOCKSIZE/2
-                a = SHORTBLOCKSIZE/2
-            else:
-                a = LONGBLOCKSIZE/2
-                b = a
-            N = a+b
-            halfN = N/2
-
-            data[iCh] = np.concatenate( (data[iCh],np.add(codingParams.overlapAndAdd[iCh],decodedData[:a]) ) )  # data[iCh] is overlap-and-added data
-            codingParams.overlapAndAdd[iCh] = decodedData[a:]  # save other half for next pass
+            scaleFactorFull.append(scaleFactor)
+            bitAllocFull.append(bitAlloc)
+            mantissaFull.append(mantissa)
+            overallScaleFactorFull.append(overallScaleFactor)
+        # Extract coupled channel
+        
+        # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
+        decodedData = self.Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codingParams)
+        if(codingParams.blocksize == 3):
+            #print "MDCTLines: ", codingParams.nMDCTLines
+            a = LONGBLOCKSIZE/2
+            b = SHORTBLOCKSIZE/2
+        elif (codingParams.blocksize == 2):
+            a = SHORTBLOCKSIZE/2
+            b = a
+        elif (codingParams.blocksize == 1):
+            b = LONGBLOCKSIZE/2
+            a = SHORTBLOCKSIZE/2
+        else:
+            a = LONGBLOCKSIZE/2
+            b = a
+        N = a+b
+        halfN = N/2
+        for iCh in range(codingParams.nChannels):
+            data[iCh] = np.concatenate( (data[iCh],np.add(codingParams.overlapAndAdd[iCh],decodedData[iCh][:a]) ) )  # data[iCh] is overlap-and-added data
+            codingParams.overlapAndAdd[iCh] = decodedData[iCh][a:]  # save other half for next pass
         # end loop over channels, return signed-fraction samples for this block
         return data
 
@@ -307,9 +337,28 @@ class PACFile(AudioFile):
             codingParams.priorBlock[iCh] = np.copy(data[iCh])  # current pass's data is next pass's prior block data
         # (ENCODE HERE) Encode the full block of multi=channel data
         (scaleFactor,bitAlloc,mantissa, overallScaleFactor) = self.Encode(fullBlockData,codingParams)  # returns a tuple with all the block-specific info not in the file header
+        nBytes = (2*codingParams.nScaleBits)*len(codingParams.couplingParams)
+        
+        if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
+        else: nBytes = nBytes/BYTESIZE + 1
+        self.fp.write(pack("<L",int(nBytes))) # stores size as a little-endian unsigned long
+        #print nBytes
+            # create a PackedBits object to hold the nBytes of data for this channel/block of coded data
+        pb = PackedBits()
+        pb.Size(nBytes)
+        #print len(codingParams.couplingParams)
+        for i in range(len(codingParams.couplingParams)):
+            couplingScale = codec.ScaleFactor(codingParams.couplingParams[i],codingParams.nScaleBits,4)
+            couplingMant = codec.MantissaFP(codingParams.couplingParams[i],couplingScale,codingParams.nScaleBits,4)
+            #print codingParams.couplingParams[i], couplingScale,couplingMant
+            pb.WriteBits(couplingScale,codingParams.nScaleBits)
+            pb.WriteBits(couplingMant,codingParams.nScaleBits)
+            # finally, write the data in this channel's PackedBits object to the output file
+        self.fp.write(pb.GetPackedData()) 
 
+        nBytes = 0
         # for each channel, write the data to the output file
-        for iCh in range(codingParams.nChannels):
+        for iCh in range(codingParams.nChannels): 
             # determine the size of this channel's data block and write it to the output file
             nBytes = codingParams.nScaleBits  # bits for overall scale factor
             for iBand in range(codingParams.sfBands.nBands): # loop over each scale factor band to get its bits
@@ -326,6 +375,7 @@ class PACFile(AudioFile):
             nBytes += 2  # for blocksize ID
             # Bits for spectral envelope of each channel
             nBytes += codingParams.nSpecEnvBits*len(codingParams.specEnv[iCh])
+            
 
             # now convert the bits to bytes (w/ extra one if spillover beyond byte boundary)
             if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
@@ -359,9 +409,10 @@ class PACFile(AudioFile):
                 pb.WriteBits(envScale,codingParams.nScaleBits)
                 # Hardcoding 4 Mantissa bits, using floating-point to quantize
                 pb.WriteBits(codec.MantissaFP(codingParams.specEnv[iCh][i],envScale,codingParams.nScaleBits,4),codingParams.nScaleBits)
-
-            # finally, write the data in this channel's PackedBits object to the output file
             self.fp.write(pb.GetPackedData())
+            
+
+           
         # end loop over channels, done writing coded data for all channels
         return
 
@@ -388,13 +439,13 @@ class PACFile(AudioFile):
         #Passes encoding logic to the Encode function defined in the codec module
         return codec.Encode(data,codingParams)
 
-    def Decode(self,scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams,iCh):
+    def Decode(self,scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams):
         """
         Decodes a single audio channel of data based on the values of its scale factors,
         bit allocations, quantized mantissas, and overall scale factor.
         """
         #Passes decoding logic to the Decode function defined in the codec module
-        return codec.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams,iCh)
+        return codec.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
 
 
 
@@ -417,9 +468,11 @@ if __name__=="__main__":
     coded_filename = "coded.pac"
     data_rate = 64000. # User defined data rate in bits/s/ch
     cutoff = 9500 # Global SBR cutoff
+    couplingFrequency = 3700
     output_filename = "sbrTest_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
     doSBR = True
+    doCoupling = True
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
@@ -431,7 +484,7 @@ if __name__=="__main__":
     elapsed = time.time()
 
     for Direction in ("Encode", "Decode"):
- #   for Direction in ("Decode"):
+    #for Direction in ("Decode"):
 
         # create the audio file objects
         if Direction == "Encode":
@@ -462,10 +515,16 @@ if __name__=="__main__":
             codingParams.doSBR = doSBR # For toggling SBR algorithm
             codingParams.nSpecEnvBits = nSpecEnvBits # Bits per band in spectral envelope
             codingParams.specEnv  = np.zeros((codingParams.nChannels,24-codec.freqToBand(codingParams.sbrCutoff)))
-
+            
+            codingParams.doCoupling = doCoupling
+            codingParams.nCouplingStart = COUPLINGSTART
+            codingParams.PRINT_ONE = True
+            
+            
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16
+            codingParams.PRINT_TWO = True
         # only difference is in setting up the output file parameters
 
 
