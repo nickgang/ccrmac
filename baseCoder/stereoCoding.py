@@ -29,6 +29,7 @@ def ChannelCoupling(mdct, Fs, couplingStart):
     high frequencies
     """
     # TODO: use spectral power to compute start of coupling
+    mdct = MSEncode(np.array(mdct))
     nChannels = len(mdct)
     nMdctLines = len(mdct[0]) 
     mdctLineAssign = AssignMDCTLinesFromFreqLimits(nMdctLines, Fs)
@@ -68,8 +69,6 @@ def ChannelCoupling(mdct, Fs, couplingStart):
     return uncoupledData,coupledChannel,couplingParams
 
 def ChannelDecoupling(uncoupledData,coupledChannel,couplingParams,Fs,couplingStart):
-    uncoupledData = 2*np.array(uncoupledData)
-    coupledChannel = 2*np.array(coupledChannel)
     nMDCTLines = len(coupledChannel) 
     nChannels = len(uncoupledData)
     couplingScales = couplingParams
@@ -80,6 +79,7 @@ def ChannelDecoupling(uncoupledData,coupledChannel,couplingParams,Fs,couplingSta
     couplingIdx = 1
     startIdx = uncoupledLen
     reconstructedChannels = np.zeros([nChannels,nMDCTLines])
+    
     if len(uncoupledData[0]) > 0:
         for k in range(nChannels):
             reconstructedChannels[k][:uncoupledLen] += uncoupledData[k][:uncoupledLen]
@@ -95,5 +95,6 @@ def ChannelDecoupling(uncoupledData,coupledChannel,couplingParams,Fs,couplingSta
     mdct = []
     for n in range(nChannels):
         mdct.append(list(reconstructedChannels[n]))
+    mdct = MSDecode(np.array(mdct))
     return mdct
 
