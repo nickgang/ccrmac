@@ -98,13 +98,14 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
         # db print SMR*(nLines>0)
         i = np.arange(nBands)[badBand][np.argmax(((SMR*(nLines>0))-mantBits*6)[badBand])]
         
-        if (bitBudget-nLines[i]) >= 0:
+        if (bitBudget-nLines[i]) >= 0 and nLines[i] > 0:
             mantBits[i] += 1
             bitBudget -= nLines[i]
             if mantBits[i] > maxMantBits:
                 badBand[i] = False
             else:
                 badBand[i] = False
+        
         # db print mantBits
     
     mantBits = np.minimum(mantBits, np.ones_like(mantBits)*maxMantBits)

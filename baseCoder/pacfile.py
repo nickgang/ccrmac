@@ -247,6 +247,7 @@ class PACFile(AudioFile):
             # CUSTOM DATA:
             # < now can unpack any custom data passed in the nBytes of data >
             
+            # db print bitAlloc
 
             # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
             decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
@@ -442,9 +443,9 @@ if __name__=="__main__":
     trans = np.zeros(81)
     pes = np.zeros(81)
 
-    input_filename = "HarpShort.wav"
+    input_filename = "halfHarp.wav"
     coded_filename = "coded.pac"
-    output_filename = "HarpShorttestblock128.wav"
+    output_filename = "HarpHalftestblock128shortbitboost_1_6_allShort.wav"
     #output_filename = "testingblocks.wav"
     data_rate = 128000. # User defined data rate in bits/s/ch
 
@@ -576,9 +577,9 @@ if __name__=="__main__":
                 codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*\
                                                     K) - (6+np.sum(codingParams.sfBands.nLines > 0)*\
                                                     (codingParams.nScaleBits+codingParams.nMantSizeBits)))/K
-                #if(codingParams.blocksize == 2):
-                #codingParams.targetBitsPerSample = 16    
-                print codingParams.targetBitsPerSample
+                if(codingParams.blocksize == 2):
+                    codingParams.targetBitsPerSample *= 1.6    
+                # db print codingParams.targetBitsPerSample
             else:
                 data = inFile.ReadDataBlock(codingParams)
             

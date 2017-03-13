@@ -178,7 +178,7 @@ def EncodeSingleChannel(data,codingParams):
     #print "SMR: ", SMRs
     # perform bit allocation using SMR results
     bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
-    print bitAlloc;
+    # db print bitAlloc;
     # detect transient 
     #PE = CalcPE(getMaskedThreshold(data, mdctLines, overallScale, codingParams.sampleRate, sfBands), mdctLines, overallScale)
     #if(PE < 0.02): 
