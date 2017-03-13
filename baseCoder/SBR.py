@@ -50,23 +50,21 @@ def calcSpecEnv(data,cutoff,fs,hfRecType=2):
 ########## Decoder Methods ##########
 
 # High Frequency Reconstruction
-def HiFreqRec(mdctLines,fs,cutoff):
-    nMDCT = len(mdctLines)
-    cutBin = freqToBin(nMDCT,cutoff,fs)
-    lowerBand = mdctLines[0:cutBin]
-    mdctLines[cutBin+1:cutBin+len(lowerBand)+1] = lowerBand # Do the transposition
-    return mdctLines.astype(float) # If these are ints it can cause problems
-
-# Alternate function, replicates top half of subband twice
-def HiFreqRec2(mdctLines,fs,cutoff):
+def HiFreqRec(mdctLines,fs,cutoff,hfRecType=2):
+    # hfRecType: 1 means straight bin transposition
+    #            2 means altered transposition (default)
     nMDCT = len(mdctLines)
     cutBin = freqToBin(nMDCT,cutoff,fs)
     lowerBand = np.array(mdctLines[0:cutBin],copy=True)
-    try: # Being hacky to account for off by 1 errors
-        lowerBand[0:int(np.floor(cutBin/2))] = lowerBand[int(np.floor(cutBin/2)):cutBin]
-    except ValueError:
-        lowerBand[0:int(np.floor(cutBin/2))] = lowerBand[int(np.floor(cutBin/2)+1):cutBin]
-    mdctLines[cutBin+1:cutBin+len(lowerBand)+1] = lowerBand # Do the transposition
+    if hfRecType==1:
+        mdctLines[cutBin+1:cutBin+len(lowerBand)+1] = lowerBand # Do the transposition
+    elif hfRecType==2:
+        try: # Being hacky to account for off by 1 errors
+            lowerBand[0:int(np.floor(cutBin/2))] = lowerBand[int(np.floor(cutBin/2)):cutBin]
+        except ValueError:
+            lowerBand[0:int(np.floor(cutBin/2))] = lowerBand[int(np.floor(cutBin/2)+1):cutBin]
+        mdctLines[cutBin+1:cutBin+len(lowerBand)+1] = lowerBand # Do the transposition
+
     return mdctLines.astype(float) # If these are ints it can cause problems
 
 # Additional High Frequency Components
