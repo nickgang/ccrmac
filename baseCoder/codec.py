@@ -136,7 +136,13 @@ def EncodeSingleChannel(data,codingParams):
     #bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
     
     # NEW compute target bit rate based on block type
+    
+    #if(codingParams.blocksize == 2):
+    #    codingParams.targetBitsPerSample = 16
+    
     bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
+    
+    
     
     bitBudget -=  nScaleBits*(sfBands.nBands + 1)  # less scale factor bits (including overall scale factor)
     
@@ -169,9 +175,10 @@ def EncodeSingleChannel(data,codingParams):
     # compute the mantissa bit allocations
     # compute SMRs in side chain FFT
     SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
+    #print "SMR: ", SMRs
     # perform bit allocation using SMR results
     bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
-    
+    print bitAlloc;
     # detect transient 
     #PE = CalcPE(getMaskedThreshold(data, mdctLines, overallScale, codingParams.sampleRate, sfBands), mdctLines, overallScale)
     #if(PE < 0.02): 
@@ -180,9 +187,7 @@ def EncodeSingleChannel(data,codingParams):
 
     # given the bit allocations, quantize the mdct lines in each band
     scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
-    #nMant=halfN
     
-    # NEW
     nMant = halfN
     
     for iBand in range(sfBands.nBands):

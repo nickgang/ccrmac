@@ -264,8 +264,8 @@ def CalcPE(maskThresh, MDCTdata, MDCTscale):
     #pass
     
 def DetectTransient(data, codingParams):
-    fs = 48000
-    #fs = codingParams.sampleRate
+    #fs = 48000
+    fs = codingParams.sampleRate
     N = data.size
     MDCTdata = MDCT(SineWindow(data),N/2,N/2)
     sineWin = (1/float(N))*np.sum(np.power(SineWindow(np.ones_like(data)),2)) # Get avg pow of KBD window
@@ -274,7 +274,7 @@ def DetectTransient(data, codingParams):
     PE = np.sum(np.log2(1+np.sqrt(Intensity(sineDB)/(Intensity(sineDB-thresh)))))/(MDCTdata.size)
     delta = (PE - codingParams.prevPE)
     #if(codingParams.prevPE == -10): DT = False
-    print delta
+    #print delta
     DT = delta > 1
     #print PE
     codingParams.prevPE = PE
