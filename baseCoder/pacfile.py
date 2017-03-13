@@ -370,11 +370,11 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "germ_trim.wav"
+    input_filename = "sbrTest.wav"
     coded_filename = "coded.pac"
     data_rate = 48000. # User defined data rate in bits/s/ch
     cutoff = 5300 # Global SBR cutoff
-    output_filename = "germ_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
+    output_filename = "sbrTest_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
     doSBR = True
 
