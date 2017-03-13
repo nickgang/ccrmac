@@ -112,7 +112,7 @@ import numpy as np  # to allow conversion of data blocks to numpy's array object
 MAX16BITS = 32767
 SHORTBLOCKSIZE = 256
 LONGBLOCKSIZE = 2048
-COUPLINGSTART = 17
+COUPLINGSTART = 20
 
 shortFreqLimits = np.array([300,630,1080,1720,2700,4400,7700,15500])
 
@@ -178,7 +178,6 @@ class PACFile(AudioFile):
         bitAllocFull = []
         overallScaleFactorFull = []
         s=self.fp.read(calcsize("<L"))
-        codingParams.couplingParmas = []
         if s:
             nBytes = unpack("<L",s)[0]
             #print nBytes
@@ -193,7 +192,24 @@ class PACFile(AudioFile):
                 couplingParams.append(codec.DequantizeFP(couplingScale,couplingMant,\
                                                  codingParams.nScaleBits,codingParams.nScaleBits))
             codingParams.couplingParams = couplingParams
-
+        s=self.fp.read(calcsize("<L"))        
+        if s:
+            nBytes = unpack("<L",s)[0]
+            #print nBytes
+            #print nBytes
+            pb = PackedBits()
+            pb.SetPackedData(self.fp.read(nBytes))
+            if pb.nBytes < nBytes: raise "error with coupled channel"
+            coupledChannel = []
+            for i in range(nBytes): #1+(25-codingParams.nCouplingStart)*codingParams.nChannels):
+                couplingScale = pb.ReadBits(codingParams.nScaleBits)
+                couplingMant = pb.ReadBits(codingParams.nScaleBits)
+                #print couplingScale,couplingMant
+                coupledChannel.append(codec.DequantizeFP(couplingScale,couplingMant,\
+                                                 codingParams.nScaleBits,codingParams.nScaleBits))
+            codingParams.coupledChannel = coupledChannel
+        #print codingParams.coupledChannel
+            
         for iCh in range(codingParams.nChannels):
             data.append(np.array([],dtype=np.float64))  # add location for this channel's data
             # read in string containing the number of bytes of data for this channel (but check if at end of file!)
@@ -263,6 +279,7 @@ class PACFile(AudioFile):
             bitAllocFull.append(bitAlloc)
             mantissaFull.append(mantissa)
             overallScaleFactorFull.append(overallScaleFactor)
+        
         # Extract coupled channel
         
         # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
@@ -337,8 +354,9 @@ class PACFile(AudioFile):
             codingParams.priorBlock[iCh] = np.copy(data[iCh])  # current pass's data is next pass's prior block data
         # (ENCODE HERE) Encode the full block of multi=channel data
         (scaleFactor,bitAlloc,mantissa, overallScaleFactor) = self.Encode(fullBlockData,codingParams)  # returns a tuple with all the block-specific info not in the file header
-        nBytes = (2*codingParams.nScaleBits)*len(codingParams.couplingParams)
         
+        nBytes = (2*codingParams.nScaleBits)*len(codingParams.couplingParams)
+        #print nBytes
         if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
         else: nBytes = nBytes/BYTESIZE + 1
         self.fp.write(pack("<L",int(nBytes))) # stores size as a little-endian unsigned long
@@ -355,6 +373,25 @@ class PACFile(AudioFile):
             pb.WriteBits(couplingMant,codingParams.nScaleBits)
             # finally, write the data in this channel's PackedBits object to the output file
         self.fp.write(pb.GetPackedData()) 
+       
+        nBytes = (2*codingParams.nScaleBits)*len(codingParams.coupledChannel)
+        #print nBytes
+        if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
+        else: nBytes = nBytes/BYTESIZE + 1
+        self.fp.write(pack("<L",int(nBytes))) # stores size as a little-endian unsigned long
+        #print nBytes
+            # create a PackedBits object to hold the nBytes of data for this channel/block of coded data
+        pb = PackedBits()
+        pb.Size(nBytes)
+        for i in range(len(codingParams.coupledChannel)):
+            couplingScale = codec.ScaleFactor(codingParams.coupledChannel[i],codingParams.nScaleBits,4)
+            couplingMant = codec.MantissaFP(codingParams.coupledChannel[i],couplingScale,codingParams.nScaleBits,4)
+            #print codingParams.couplingParams[i], couplingScale,couplingMant
+            pb.WriteBits(couplingScale,codingParams.nScaleBits)
+            pb.WriteBits(couplingMant,codingParams.nScaleBits)
+            # finally, write the data in this channel's PackedBits object to the output file
+        self.fp.write(pb.GetPackedData())
+
 
         nBytes = 0
         # for each channel, write the data to the output file
@@ -411,8 +448,7 @@ class PACFile(AudioFile):
                 pb.WriteBits(codec.MantissaFP(codingParams.specEnv[iCh][i],envScale,codingParams.nScaleBits,4),codingParams.nScaleBits)
             self.fp.write(pb.GetPackedData())
             
-
-           
+        
         # end loop over channels, done writing coded data for all channels
         return
 

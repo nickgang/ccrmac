@@ -30,7 +30,7 @@ def ChannelCoupling(mdct, Fs, couplingStart):
     """
     # TODO: use spectral power to compute start of coupling
     mdct = MSEncode(np.array(mdct))
-    mdct[0] = np.roll(mdct[0],len(mdct[0])/2)
+    #mdct[0] = np.roll(mdct[0],len(mdct[0])/2)
     nChannels = len(mdct)
     nMdctLines = len(mdct[0]) 
     mdctLineAssign = AssignMDCTLinesFromFreqLimits(nMdctLines, Fs)
@@ -78,7 +78,7 @@ def ChannelDecoupling(uncoupledData,coupledChannel,couplingParams,Fs,couplingSta
     coupledLen = nMDCTLines-uncoupledLen 
     phase_shift = couplingParams[0]
     couplingIdx = 1
-    startIdx = uncoupledLen
+    startIdx = int(uncoupledLen)
     reconstructedChannels = np.zeros([nChannels,nMDCTLines])
     
     if len(uncoupledData[0]) > 0:
@@ -86,17 +86,18 @@ def ChannelDecoupling(uncoupledData,coupledChannel,couplingParams,Fs,couplingSta
             reconstructedChannels[k][:uncoupledLen] += uncoupledData[k][:uncoupledLen]
     for n in range(couplingStart,len(mdctLineAssign)):
         nLines = mdctLineAssign[n]
-        endIdx = startIdx + nLines
+        endIdx = int(startIdx + nLines)
+        #print startIdx,endIdx
         couplingBand = coupledChannel[startIdx:endIdx]
         for k in range(nChannels):
             scale = couplingScales[couplingIdx]
             couplingIdx += 1
             reconstructedChannels[k][startIdx:endIdx]+= scale*np.array(couplingBand)-phase_shift
-        startIdx += nLines
+        startIdx += int(nLines)
     mdct = []
     for n in range(nChannels):
         mdct.append(list(reconstructedChannels[n]))
-    mdct[0] = np.roll(mdct[0],-len(mdct[0])/2)
+    #mdct[0] = np.roll(mdct[0],-len(mdct[0])/2)
     mdct = MSDecode(np.array(mdct))
     return mdct
 

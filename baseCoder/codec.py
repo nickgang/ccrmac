@@ -68,13 +68,10 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
         mdctLine /= rescaleLevel  # put overall gain back to original level
         mdctLines.append(mdctLine)
         
-    if codingParams.doSBR == True:    
+    if codingParams.doSBR == True and len(mdctLines[0]) > 128: 
+        #print len(mdctLines[0])
         mdctLines = np.array(mdctLines)
-        start = sum(codingParams.sfBands.nLines[:codingParams.nCouplingStart])
-        coupledChannel = mdctLines[0]
-        coupledChannel[:start] *= 0
-        mdctLines[0][start:] *= 0
-        mdctLines = ChannelDecoupling(mdctLines,coupledChannel,codingParams.couplingParams,codingParams.sampleRate,codingParams.nCouplingStart)
+        mdctLines = ChannelDecoupling(mdctLines,codingParams.coupledChannel,codingParams.couplingParams,codingParams.sampleRate,codingParams.nCouplingStart)
         
     mdctLines = np.array(mdctLines)
     for iCh in range(codingParams.nChannels):
@@ -102,6 +99,7 @@ def Encode(data,codingParams):
     mantissa = []
     overallScaleFactor = []
     codingParams.couplingParams = np.zeros(1+((25-codingParams.nCouplingStart)*codingParams.nChannels)).astype(float)
+    codingParams.coupledChannel = np.ones(codingParams.nMDCTLines,np.float64)*0.5
     if codingParams.doSBR:
         (scaleFactor,bitAlloc,mantissa,overallScaleFactor) = EncodeDataWithCoupling(np.array(data),codingParams)
     else:
@@ -182,8 +180,8 @@ def EncodeDataWithCoupling(data,codingParams):
         mdctLinesFull.append(mdctLines)
         
     uncoupledData, coupledChannel, couplingParams = ChannelCoupling(mdctLinesFull,codingParams.sampleRate,codingParams.nCouplingStart)
-    uncoupledData[0] += coupledChannel
     codingParams.couplingParams = couplingParams
+    codingParams.coupledChannel = coupledChannel
     mdctLinesFull = uncoupledData
         
     scaleFactorFull= []
