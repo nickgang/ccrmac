@@ -150,7 +150,7 @@ def EncodeSingleChannel(data,codingParams):
     
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
     bitBudget -= 2
-    #print "Bitbudget: ", bitBudget
+    # db print "Bitbudget: ", bitBudget
 
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data

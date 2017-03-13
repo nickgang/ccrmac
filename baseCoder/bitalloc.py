@@ -43,17 +43,14 @@ def BitAllocConstMNR(bitBudget, maxMantBits, nBands, nLines, SMR):
 def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
     """
     Allocates bits to scale factor bands so as to flatten the NMR across the spectrum
-
        Arguments:
            bitBudget is total number of mantissa bits to allocate
            maxMantBits is max mantissa bits that can be allocated per line
            nBands is total number of scale factor bands
            nLines[nBands] is number of lines in each scale factor band
            SMR[nBands] is signal-to-mask ratio in each scale factor band
-
         Return:
             bits[nBands] is number of bits allocated to each scale factor band
-
         Logic:
            Maximizing SMR over blook gives optimization result that:
                R(i) = P/N + (1 bit/ 6 dB) * (SMR[i] - avgSMR)
@@ -72,19 +69,17 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
     while allocBits < bitBudget:
         smrSort = np.argsort(localSMR)[::-1]
         maxSMR = smrSort[0]
-        if(nLines[maxSMR]>0):
-            # Enter this loop when can't allocate bit to max SMR
+        if nLines[maxSMR] > 0:
             if allocBits+nLines[maxSMR] >= bitBudget:
                 for i in range(1,nBands):
-                    maxSMR = smrSort[i] # Check next highest SMR
+                    maxSMR = smrSort[i]
                     if (allocBits)+nLines[maxSMR] >= bitBudget:
                         pass
                     else:
                         allocBits += nLines[maxSMR]
                         mantBits[maxSMR] += 1
                         localSMR[maxSMR] -= 6
-    
-                break # Once the remaining bits are allocated we are done
+                break
             else:
                 allocBits += nLines[maxSMR]
                 mantBits[maxSMR] += 1
@@ -92,10 +87,29 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
         else:
             localSMR[maxSMR] -= 6
 
-    mantBits[np.nonzero(mantBits < 2)] = 0 # No lonely or negative bits
-    mantBits[np.nonzero(mantBits > maxMantBits)] = maxMantBits # Enforce max mant bits
-
+    # Go back through and reallocate lonely bits and overflowing bits
+    badBand = mantBits < maxMantBits
+    # db print "Allocating Lonely Ones: "
+    while (mantBits==1).any() and badBand.any():
+        # Pick lonely bit in highest critical band possible
+        i = np.max(np.argwhere(mantBits==1))
+        mantBits[i] = 0
+        badBand[i] = False
+        # db print SMR*(nLines>0)
+        i = np.arange(nBands)[badBand][np.argmax(((SMR*(nLines>0))-mantBits*6)[badBand])]
+        
+        if (bitBudget-nLines[i]) >= 0:
+            mantBits[i] += 1
+            bitBudget -= nLines[i]
+            if mantBits[i] > maxMantBits:
+                badBand[i] = False
+            else:
+                badBand[i] = False
+        # db print mantBits
+    
+    mantBits = np.minimum(mantBits, np.ones_like(mantBits)*maxMantBits)
     return mantBits
+
 
 #-----------------------------------------------------------------------------
 
