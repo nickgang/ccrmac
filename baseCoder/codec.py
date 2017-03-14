@@ -152,7 +152,6 @@ def EncodeDataWithCoupling(data,codingParams):
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
     bitBudget -= 2 # block ID size TODO: make this a variable
     mdctLinesFull = []
-    print codingParams.doSBR
     for iCh in range(codingParams.nChannels):
         if codingParams.doSBR == True:
             # Calculate Spectral Envelope based on original signal

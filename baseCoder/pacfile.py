@@ -150,7 +150,7 @@ class PACFile(AudioFile):
         myParams.nMantSizeBits = nMantSizeBits
         # SBR Stuff
         myParams.sbrCutoff = 5300 # Specified in Hz
-        myParams.doSBR = False # For toggling SBR algorithm
+        myParams.doSBR = True # For toggling SBR algorithm
         myParams.nSpecEnvBits = 8 # number of bits per spectral envelope band
         myParams.specEnv = np.zeros((nChannels,24-codec.freqToBand(myParams.sbrCutoff)))
         # Block Switching Stuff
@@ -532,7 +532,7 @@ if __name__=="__main__":
     couplingFrequency = 3700
     output_filename = "glock_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
-    doSBR = False
+    doSBR = True
     doCoupling = True
 
     if len(sys.argv) > 1:
