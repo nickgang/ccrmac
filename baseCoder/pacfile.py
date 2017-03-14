@@ -144,7 +144,7 @@ class PACFile(AudioFile):
         myParams.sbrCutoff = 5300. # Specified in Hz
         myParams.doSBR = True # For toggling SBR algorithm
         myParams.nSpecEnvBits = 8 # number of bits per spectral envelope band
-        myParams.specEnv = np.zeros((nChannels,24-codec.freqToBand(myParams.sbrCutoff)))
+        myParams.specEnv = np.zeros((nChannels,int(24-codec.freqToBand(myParams.sbrCutoff))))
 
         # add in scale factor band information
         myParams.sfBands =sfBands
@@ -418,7 +418,7 @@ if __name__=="__main__":
             codingParams.sbrCutoff = cutoff # Specified in Hz
             codingParams.doSBR = doSBR # For toggling SBR algorithm
             codingParams.nSpecEnvBits = nSpecEnvBits # Bits per band in spectral envelope
-            codingParams.specEnv  = np.zeros((codingParams.nChannels,24-codec.freqToBand(codingParams.sbrCutoff)))
+            codingParams.specEnv  = np.zeros((codingParams.nChannels,int(24-codec.freqToBand(codingParams.sbrCutoff))))
             # Calculate target bits/line based on Fs and data rate
             codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*K)\
              - (204+len(codingParams.specEnv[0])*codingParams.nSpecEnvBits))/K
