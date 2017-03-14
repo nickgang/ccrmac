@@ -27,7 +27,6 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
     """Reconstitutes a single-channel block of encoded data into a block of
     signed-fraction data based on the parameters in a PACFile object"""
 
-    
     if(codingParams.blocksize == 3):
         #print "MDCTLines: ", codingParams.nMDCTLines
         a = LONGBLOCKSIZE/2
@@ -51,7 +50,7 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
     data = []
     mdctLines = []
     for iCh in range(codingParams.nChannels):
-        
+
         scaleFactor = scaleFactorFull[iCh]
         bitAlloc = bitAllocFull[iCh]
         mantissa = mantissaFull[iCh]
@@ -67,14 +66,14 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
             iMant += nLines
         mdctLine /= rescaleLevel  # put overall gain back to original level
         mdctLines.append(mdctLine)
-        
+
     #print codingParams.couplingParams
-    if codingParams.doSBR == True and len(mdctLines[0]) > 128: 
+    if codingParams.doSBR == True and len(mdctLines[0]) > 128:
         #print len(mdctLines[0])
         mdctLines = np.array(mdctLines)
         # better to just pass codingParams to channelDecoupling?
         mdctLines = ChannelDecoupling(mdctLines,codingParams.coupledChannel,codingParams.couplingParams,codingParams.sampleRate,codingParams.nCouplingStart)
-        
+
     mdctLines = np.array(mdctLines)
     for iCh in range(codingParams.nChannels):
         data.append(np.array([],dtype=np.float64))  # add location for this channel's data
@@ -94,7 +93,7 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
         data[iCh] = np.append(SineWindow(np.append(imdct[:a],np.zeros(a)))[:a],SineWindow(np.append(np.zeros(b),imdct[a:]))[b:])
         #print data.size
     # end loop over channels, return reconstituted time samples (pre-overlap-and-add)
-    
+
     return data
 
 
@@ -153,38 +152,39 @@ def EncodeDataWithCoupling(data,codingParams):
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
     bitBudget -= 2 # block ID size TODO: make this a variable
     mdctLinesFull = []
+    print codingParams.doSBR
     for iCh in range(codingParams.nChannels):
         if codingParams.doSBR == True:
             # Calculate Spectral Envelope based on original signal
             specEnv = calcSpecEnv(data[iCh],codingParams.sbrCutoff,codingParams.sampleRate)
             # Append in spectral envelope for this channel into empty container
             codingParams.specEnv[iCh][:] = specEnv
-    
+
             #Decimate and lowpass signal by factor determined by cutoff frequency
             doDecimate = False
             if doDecimate==True:
                 Wc = codingParams.sbrCutoff/float(codingParams.sampleRate/2.)# Normalized cutoff frequency
                 B,A = signal.butter(4,Wn)
                 data[iCh] = signal.lfilter(B,A,data[iCh])
-    
+
         # window data for side chain FFT and also window and compute MDCT
         timeSamples = data[iCh]
         # Window data based on block size
         mdctTimeSamples = np.append(SineWindow(np.append(timeSamples[:a],np.zeros(a)))[:a],SineWindow(np.append(np.zeros(b),timeSamples[a:]))[b:])
         # Call MDCT with a, b reflecting block size
         mdctLines = MDCT(mdctTimeSamples, a, b)
-        
+
         # compute overall scale factor for this block and boost mdctLines using it
         maxLine = np.max( np.abs(mdctLines) )
         overallScale = ScaleFactor(maxLine,nScaleBits)  #leading zeroaes don't depend on nMantBits
         mdctLines *= (1<<overallScale)
         mdctLinesFull.append(mdctLines)
-        
+
     uncoupledData, coupledChannel, couplingParams = ChannelCoupling(mdctLinesFull,codingParams.sampleRate,codingParams.nCouplingStart)
     codingParams.couplingParams = couplingParams
     codingParams.coupledChannel = coupledChannel
     mdctLinesFull = uncoupledData
-        
+
     scaleFactorFull= []
     bitAllocFull = []
     mantissaFull = []
@@ -193,7 +193,7 @@ def EncodeDataWithCoupling(data,codingParams):
         # compute the mantissa bit allocations
         # compute SMRs in side chain FFT
         SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
-    
+
         if codingParams.doSBR == True:
             # Critical band starting here are above cutoff
             cutBin = freqToBand(codingParams.sbrCutoff)
@@ -205,7 +205,7 @@ def EncodeDataWithCoupling(data,codingParams):
         # given the bit allocations, quantize the mdct lines in each band
         scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
         nMant = halfN
-    
+
         for iBand in range(sfBands.nBands):
             if not bitAlloc[iBand]: nMant-= sfBands.nLines[iBand]  # account for mantissas not being transmitted
         mantissa=np.empty(nMant,dtype=np.int32)
@@ -233,7 +233,7 @@ def EncodeDataWithCoupling(data,codingParams):
 
 def EncodeSingleChannel(data,codingParams,iCh):
     """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
-    # NEW: Determine block type and set a,b        
+    # NEW: Determine block type and set a,b
     if(codingParams.blocksize < 2):
         b = LONGBLOCKSIZE/2
     else:
@@ -289,7 +289,7 @@ def EncodeSingleChannel(data,codingParams,iCh):
     maxLine = np.max( np.abs(mdctLines) )
     overallScale = ScaleFactor(maxLine,nScaleBits)  #leading zeroes don't depend on nMantBits
     mdctLines *= (1<<overallScale)
-        
+
     # compute the mantissa bit allocations
     # compute SMRs in side chain FFT
     SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
