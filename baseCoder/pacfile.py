@@ -112,9 +112,10 @@ import numpy as np  # to allow conversion of data blocks to numpy's array object
 MAX16BITS = 32767
 SHORTBLOCKSIZE = 256
 LONGBLOCKSIZE = 2048
+SHORTBLOCKBITBOOST = 1.6
 COUPLINGSTART = 20
 
-shortFreqLimits = np.array([300,630,1080,1720,2700,4400,7700,15500])
+shortFreqLimits = np.array([200,400,630,920,1270,1720,2320,3150,4400,6400,9500,15500])
 
 
 class PACFile(AudioFile):
@@ -144,7 +145,7 @@ class PACFile(AudioFile):
         myParams.sampleRate = sampleRate
         myParams.nChannels = nChannels
         myParams.numSamples = numSamples
-        myParams.nMDCTLines = myParams.nSamplesPerBlock = nMDCTLines
+        myParams.nMDCTLines = myParams.nSamplesPerBlock = nMDCTLines # TODO: make sure Long block
         myParams.nScaleBits = nScaleBits
         myParams.nMantSizeBits = nMantSizeBits
         # SBR Stuff
@@ -153,7 +154,10 @@ class PACFile(AudioFile):
         myParams.nSpecEnvBits = 8 # number of bits per spectral envelope band
         myParams.specEnv = np.zeros((nChannels,24-codec.freqToBand(myParams.sbrCutoff)))
         # Block Switching Stuff
-        myParams.blocksize = 0 # 0-3 to indicate which blocktype
+        myParams.doBS = True
+        myParams.blocksize = 0 # 0-3 to indicate which blocktype - not needed?
+        #myParams.longBlockSize = 2048
+        #myParams.shortBlockSize = 256
         # add in scale factor band information
         myParams.sfBands =sfBands
         myParams.doCoupling = True
@@ -184,14 +188,40 @@ class PACFile(AudioFile):
             pb = PackedBits()
             pb.SetPackedData(self.fp.read(nBytes))
             if pb.nBytes < nBytes: raise "error with coupling params"
+             # get BlockType / Size data
+            #if(codingParams.doBS):
             couplingParams  = []
-            for i in range(nBytes): #1+(25-codingParams.nCouplingStart)*codingParams.nChannels):
+            for i in range(nBytes-1): #1+(25-codingParams.nCouplingStart)*codingParams.nChannels):
                 couplingScale = pb.ReadBits(codingParams.nScaleBits)
-                couplingMant = pb.ReadBits(codingParams.nScaleBits)
+                couplingMant = pb.ReadBits(codingParams.nScaleBits) # nMantSizeBits?
                 #print couplingScale,couplingMant
                 couplingParams.append(codec.DequantizeFP(couplingScale,couplingMant,\
                                                  codingParams.nScaleBits,codingParams.nScaleBits))
+            # db print "CouplingParams: ", couplingParams 
             codingParams.couplingParams = couplingParams
+            codingParams.blocksize = pb.ReadBits(2)
+            # set a,b, nMDCTLines based on blocksize
+            if(codingParams.blocksize < 2):
+                b = LONGBLOCKSIZE/2
+            else:
+                b = SHORTBLOCKSIZE/2
+            if(codingParams.blocksize == 1 or codingParams.blocksize == 2):
+                a = SHORTBLOCKSIZE/2
+            else:
+                a = LONGBLOCKSIZE/2
+            N = a+b
+            halfN = N/2
+            codingParams.nMDCTLines = N/2    
+            
+            # Determine ScaleFactorBands for blocksize
+            #if(codingParams.blocksize != 2):
+            codingParams.sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(codingParams.nMDCTLines,
+                                                             codingParams.sampleRate))
+            #else:
+            #    codingParams.sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(codingParams.nMDCTLines,
+            #                                                 codingParams.sampleRate, shortFreqLimits))
+            #print codingParams.sfBands.nLines
+            
         s=self.fp.read(calcsize("<L"))        
         if s:
             nBytes = unpack("<L",s)[0]
@@ -203,10 +233,11 @@ class PACFile(AudioFile):
             coupledChannel = []
             for i in range(nBytes): #1+(25-codingParams.nCouplingStart)*codingParams.nChannels):
                 couplingScale = pb.ReadBits(codingParams.nScaleBits)
-                couplingMant = pb.ReadBits(codingParams.nScaleBits)
-                #print couplingScale,couplingMant
+                couplingMant = pb.ReadBits(codingParams.nScaleBits) # nMantSizeBits?
+                
                 coupledChannel.append(codec.DequantizeFP(couplingScale,couplingMant,\
                                                  codingParams.nScaleBits,codingParams.nScaleBits))
+            # db print len(coupledChannel)
             codingParams.coupledChannel = coupledChannel
         #print codingParams.coupledChannel
             
@@ -228,37 +259,29 @@ class PACFile(AudioFile):
             pb = PackedBits()
             pb.SetPackedData( self.fp.read(nBytes) ) # PackedBits function SetPackedData() converts strings to internally-held array of bytes
             if pb.nBytes < nBytes:  raise "Only read a partial block of coded PACFile data"
-
+            # db print "NBytes: ", nBytes
             # extract the data from the PackedBits object
-            # get BlockType / Size data
-            codingParams.blocksize = pb.ReadBits(2)
+            # get BlockType / Size data - moved
+            # codingParams.blocksize = pb.ReadBits(2)
             overallScaleFactor = pb.ReadBits(codingParams.nScaleBits)  # overall scale factor
             scaleFactor=[]
             bitAlloc=[]
-            if(codingParams.blocksize == 0):
-                codingParams.nMDCTLines = LONGBLOCKSIZE/2
-            elif(codingParams.blocksize % 2 == 1):
-                codingParams.nMDCTLines = (LONGBLOCKSIZE+SHORTBLOCKSIZE)/4
-            elif(codingParams.blocksize == 2):
-                codingParams.nMDCTLines = SHORTBLOCKSIZE/2
-
+            
             #print codingParams.nMDCTLines
             mantissa=np.zeros(codingParams.nMDCTLines,np.int32)  # start w/ all mantissas zero
-
-            # Determine ScaleFactorBands for blocksize
-            if(codingParams.blocksize != 2):
-                codingParams.sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(codingParams.nMDCTLines,
-                                                             codingParams.sampleRate))
-            else:
-                codingParams.sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(codingParams.nMDCTLines,
-                                                             codingParams.sampleRate, shortFreqLimits))
-            #print codingParams.sfBands.nLines
+            
             for iBand in range(codingParams.sfBands.nBands): # loop over each scale factor band to pack its data
-                ba = pb.ReadBits(codingParams.nMantSizeBits)
+                if(codingParams.sfBands.nLines[iBand] > 0):
+                    ba = pb.ReadBits(codingParams.nMantSizeBits)
+                else:
+                    ba = 0
                 if ba: ba+=1  # no bit allocation of 1 so ba of 2 and up stored as one less
                 bitAlloc.append(ba)  # bit allocation for this band
-                scaleFactor.append(pb.ReadBits(codingParams.nScaleBits))  # scale factor for this band
-                if bitAlloc[iBand]:
+                if(codingParams.sfBands.nLines[iBand] > 0):
+                    scaleFactor.append(pb.ReadBits(codingParams.nScaleBits))  # scale factor for this band
+                else:
+                    scaleFactor.append(0)
+                if bitAlloc[iBand] and codingParams.sfBands.nLines[iBand] > 0:
                     # if bits allocated, extract those mantissas and put in correct location in matnissa array
                     m=np.empty(codingParams.sfBands.nLines[iBand],np.int32)
                     for j in range(m.size):
@@ -284,21 +307,7 @@ class PACFile(AudioFile):
         
         # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
         decodedData = self.Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codingParams)
-        if(codingParams.blocksize == 3):
-            #print "MDCTLines: ", codingParams.nMDCTLines
-            a = LONGBLOCKSIZE/2
-            b = SHORTBLOCKSIZE/2
-        elif (codingParams.blocksize == 2):
-            a = SHORTBLOCKSIZE/2
-            b = a
-        elif (codingParams.blocksize == 1):
-            b = LONGBLOCKSIZE/2
-            a = SHORTBLOCKSIZE/2
-        else:
-            a = LONGBLOCKSIZE/2
-            b = a
-        N = a+b
-        halfN = N/2
+        # db print decodedData[0]
         for iCh in range(codingParams.nChannels):
             data[iCh] = np.concatenate( (data[iCh],np.add(codingParams.overlapAndAdd[iCh],decodedData[iCh][:a]) ) )  # data[iCh] is overlap-and-added data
             codingParams.overlapAndAdd[iCh] = decodedData[iCh][a:]  # save other half for next pass
@@ -313,12 +322,19 @@ class PACFile(AudioFile):
         """
         # write a header tag
         self.fp.write(self.tag)
+        
+        
+        # make sure nMDCTLines is large block in case ended with short blocks
+        codingParams.nMDCTLines = LONGBLOCKSIZE/2
+        
         # make sure that the number of samples in the file is a multiple of the
         # number of MDCT half-blocksize, otherwise zero pad as needed
+        
         if not codingParams.numSamples%codingParams.nMDCTLines:
             codingParams.numSamples += (codingParams.nMDCTLines
                         - codingParams.numSamples%codingParams.nMDCTLines) # zero padding for partial final PCM block
-
+        
+        
         # # also add in the delay block for the second pass w/ the last half-block (JH: I don't think we need this, in fact it generates a click at the end)
         # codingParams.numSamples+= codingParams.nMDCTLines  # due to the delay in processing the first samples on both sides of the MDCT block
 
@@ -354,9 +370,13 @@ class PACFile(AudioFile):
             codingParams.priorBlock[iCh] = np.copy(data[iCh])  # current pass's data is next pass's prior block data
         # (ENCODE HERE) Encode the full block of multi=channel data
         (scaleFactor,bitAlloc,mantissa, overallScaleFactor) = self.Encode(fullBlockData,codingParams)  # returns a tuple with all the block-specific info not in the file header
-        
+        bitAlloc = np.array(bitAlloc)
+        # db print "WDB: ", bitAlloc
         nBytes = (2*codingParams.nScaleBits)*len(codingParams.couplingParams)
-        #print nBytes
+        # add two bits for block size if using blockswitching
+        #if (codingParams.doBS):
+        nBytes += 2  # for blocksize ID
+        # db print "Write1:", nBytes
         if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
         else: nBytes = nBytes/BYTESIZE + 1
         self.fp.write(pack("<L",int(nBytes))) # stores size as a little-endian unsigned long
@@ -365,6 +385,7 @@ class PACFile(AudioFile):
         pb = PackedBits()
         pb.Size(nBytes)
         #print len(codingParams.couplingParams)
+       
         for i in range(len(codingParams.couplingParams)):
             couplingScale = codec.ScaleFactor(codingParams.couplingParams[i],codingParams.nScaleBits,4)
             couplingMant = codec.MantissaFP(codingParams.couplingParams[i],couplingScale,codingParams.nScaleBits,4)
@@ -372,9 +393,10 @@ class PACFile(AudioFile):
             pb.WriteBits(couplingScale,codingParams.nScaleBits)
             pb.WriteBits(couplingMant,codingParams.nScaleBits)
             # finally, write the data in this channel's PackedBits object to the output file
+        pb.WriteBits(codingParams.blocksize,2)
         self.fp.write(pb.GetPackedData()) 
        
-        nBytes = (2*codingParams.nScaleBits)*len(codingParams.coupledChannel)
+        nBytes = (2*codingParams.nScaleBits)*len(codingParams.coupledChannel) # scaleBit for every sample?
         #print nBytes
         if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
         else: nBytes = nBytes/BYTESIZE + 1
@@ -383,6 +405,7 @@ class PACFile(AudioFile):
             # create a PackedBits object to hold the nBytes of data for this channel/block of coded data
         pb = PackedBits()
         pb.Size(nBytes)
+        # db print "Coupled Channel size: ", len(codingParams.coupledChannel)
         for i in range(len(codingParams.coupledChannel)):
             couplingScale = codec.ScaleFactor(codingParams.coupledChannel[i],codingParams.nScaleBits,4)
             couplingMant = codec.MantissaFP(codingParams.coupledChannel[i],couplingScale,codingParams.nScaleBits,4)
@@ -399,17 +422,18 @@ class PACFile(AudioFile):
             # determine the size of this channel's data block and write it to the output file
             nBytes = codingParams.nScaleBits  # bits for overall scale factor
             for iBand in range(codingParams.sfBands.nBands): # loop over each scale factor band to get its bits
-                nBytes += codingParams.nMantSizeBits+codingParams.nScaleBits    # mantissa bit allocation and scale factor for that sf band
-                if bitAlloc[iCh][iBand]:
-                    # if non-zero bit allocation for this band, add in bits for scale factor and each mantissa (0 bits means zero)
-                    nBytes += bitAlloc[iCh][iBand]*codingParams.sfBands.nLines[iBand]  # no bit alloc = 1 so actuall alloc is one higher
+                if(codingParams.sfBands.nLines[iBand] > 0): # only add bits if MDCTLines in band
+                    nBytes += codingParams.nMantSizeBits+codingParams.nScaleBits    # mantissa bit allocation and scale factor for that sf band
+                    if bitAlloc[iCh][iBand]:
+                        # if non-zero bit allocation for this band, add in bits for scale factor and each mantissa (0 bits means zero)
+                        nBytes += bitAlloc[iCh][iBand]*codingParams.sfBands.nLines[iBand]  # no bit alloc = 1 so actuall alloc is one higher
             # end computing bits needed for this channel's data
 
             # CUSTOM DATA:
             # < now can add space for custom data, if desired>
             # add two bits for block size if using blockswitching
             #if (BSFlag):
-            nBytes += 2  # for blocksize ID
+            # moved: nBytes += 2  # for blocksize ID
             # Bits for spectral envelope of each channel
             nBytes += codingParams.nSpecEnvBits*len(codingParams.specEnv[iCh])
             
@@ -425,18 +449,19 @@ class PACFile(AudioFile):
 
             # now pack the nBytes of data into the PackedBits object
             # NEW: Block size data
-            pb.WriteBits(codingParams.blocksize,2)
+            # moving: pb.WriteBits(codingParams.blocksize,2)
             pb.WriteBits(overallScaleFactor[iCh],codingParams.nScaleBits)  # overall scale factor
             iMant=0  # index offset in mantissa array (because mantissas w/ zero bits are omitted)
             for iBand in range(codingParams.sfBands.nBands): # loop over each scale factor band to pack its data
                 ba = bitAlloc[iCh][iBand]
                 if ba: ba-=1  # if non-zero, store as one less (since no bit allocation of 1 bits/mantissa)
-                pb.WriteBits(ba,codingParams.nMantSizeBits)  # bit allocation for this band (written as one less if non-zero)
-                pb.WriteBits(scaleFactor[iCh][iBand],codingParams.nScaleBits)  # scale factor for this band (if bit allocation non-zero)
-                if bitAlloc[iCh][iBand]:
-                    for j in range(codingParams.sfBands.nLines[iBand]):
-                        pb.WriteBits(mantissa[iCh][iMant+j],bitAlloc[iCh][iBand])     # mantissas for this band (if bit allocation non-zero) and bit alloc <>1 so is 1 higher than the number
-                    iMant += codingParams.sfBands.nLines[iBand]  # add to mantissa offset if we passed mantissas for this band
+                if(codingParams.sfBands.nLines[iBand] > 0):  # only write if MDCTLines in band
+                    pb.WriteBits(ba,codingParams.nMantSizeBits)  # bit allocation for this band (written as one less if non-zero)
+                    pb.WriteBits(scaleFactor[iCh][iBand],codingParams.nScaleBits)  # scale factor for this band (if bit allocation non-zero)
+                    if bitAlloc[iCh][iBand]:
+                        for j in range(codingParams.sfBands.nLines[iBand]):
+                            pb.WriteBits(mantissa[iCh][iMant+j],bitAlloc[iCh][iBand])     # mantissas for this band (if bit allocation non-zero) and bit alloc <>1 so is 1 higher than the number
+                        iMant += codingParams.sfBands.nLines[iBand]  # add to mantissa offset if we passed mantissas for this band
             # done packing (end loop over scale factor bands)
 
             # CUSTOM DATA:
@@ -500,12 +525,12 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "sbrTest.wav"
+    input_filename = "halfHarp.wav"
     coded_filename = "coded.pac"
-    data_rate = 64000. # User defined data rate in bits/s/ch
+    data_rate = 128000. # User defined data rate in bits/s/ch
     cutoff = 9500 # Global SBR cutoff
     couplingFrequency = 3700
-    output_filename = "sbrTest_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
+    output_filename = "halfHarp_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
     doSBR = True
     doCoupling = True
@@ -540,12 +565,13 @@ if __name__=="__main__":
         if Direction == "Encode":
             # set additional parameters that are needed for PAC file
             # (beyond those set by the PCM file on open)
-            codingParams.nMDCTLines = 1024
+            codingParams.nMDCTLines = LONGBLOCKSIZE/2
             codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
             codingParams.prevPE = 10
+            codingParams.blocksize = 0 
             # tell the PCM file how large the block size is
-            codingParams.nSamplesPerBlock = codingParams.nMDCTLines
+            codingParams.nSamplesPerBlock = LONGBLOCKSIZE/2
             # SBR related stuff
             codingParams.sbrCutoff = cutoff # Specified in Hz
             codingParams.doSBR = doSBR # For toggling SBR algorithm
@@ -592,21 +618,27 @@ if __name__=="__main__":
                 # Maybe add >2 channel transient detection
                 if(codingParams.blocksize == 3):
                     codingParams.blocksize = 2
-                    K = codingParams.nMDCTLines*(2* float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
+                    codingParams.nMDCTLines = (SHORTBLOCKSIZE)/2
+                    #K = codingParams.nMDCTLines*(2* float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
+                    # assumes stereo input file
                 elif (len(data[0]) != 0 and newBlock and (DetectTransient(nextData[0],codingParams) or DetectTransient(nextData[1], codingParams))):
                     if(codingParams.blocksize < 2):
                         codingParams.blocksize = 3
-                        K = codingParams.nMDCTLines*(1 + float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
+                        codingParams.nMDCTLines = (SHORTBLOCKSIZE + LONGBLOCKSIZE)/4
+                        #K = codingParams.nMDCTLines*(1 + float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
                     else:
                         codingParams.blocksize = 2;
-                        K = codingParams.nMDCTLines*(2* float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
+                        codingParams.nMDCTLines = (SHORTBLOCKSIZE)/2
+                        #K = codingParams.nMDCTLines*(2* float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
                 elif (newBlock):
                     if(codingParams.blocksize < 2):
                         codingParams.blocksize = 0
-                        K = codingParams.nMDCTLines*2
+                        codingParams.nMDCTLines = LONGBLOCKSIZE/2
+                        #K = codingParams.nMDCTLines*2
                     else:
                         codingParams.blocksize = 1
-                        K = codingParams.nMDCTLines*(1 + float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
+                        codingParams.nMDCTLines = (SHORTBLOCKSIZE + LONGBLOCKSIZE)/4
+                        #K = codingParams.nMDCTLines*(1 + float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
                 # get correct amount of sample data
                 if(codingParams.blocksize > 1):
                     for iCh in range(codingParams.nChannels):
@@ -614,9 +646,9 @@ if __name__=="__main__":
                         nextData[iCh] = nextData [iCh][SHORTBLOCKSIZE/2:]
                 else:
                     data = nextData
-
-                #print "priorBlock data set: ",len(codingParams.priorBlock[0])
-                if(codingParams.blocksize != 2):
+                K = 2 * codingParams.nMDCTLines
+                # db print "priorBlock data set: ",len(codingParams.priorBlock[0])
+                if(codingParams.blocksize != 2): # not short block
                     sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(K/2, codingParams.sampleRate))
                     codingParams.doSBR = True # Not short block, we do SBR
                     codingParams.sfBands=sfBands
@@ -625,15 +657,20 @@ if __name__=="__main__":
                     codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*K)- \
                      (6+codingParams.sfBands.nBands*(codingParams.nScaleBits+codingParams.nMantSizeBits)+\
                      codingParams.nSpecEnvBits*len(codingParams.specEnv)))/K
-                else:
-                    sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(K/2, codingParams.sampleRate, shortFreqLimits))
+                else:   # short block
+                    sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(K/2, codingParams.sampleRate))
                     codingParams.doSBR = False
                     codingParams.sfBands=sfBands
                     # set targetBitsPerSample
                     codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*\
                             K) - (6+codingParams.sfBands.nBands*\
                             (codingParams.nScaleBits+codingParams.nMantSizeBits)))/K
-            else:
+                    # boost bit budget for short blocks
+                    codingParams.targetBitsPerSample *= SHORTBLOCKBITBOOST
+                # db print "Blocksize: ", codingParams.blocksize
+                # db print "nMDCT: ", codingParams.nMDCTLines
+                # db print "Bands set: ", codingParams.sfBands.nLines
+            else: # decoding
                 data = inFile.ReadDataBlock(codingParams)
 
             if not data:

@@ -73,7 +73,9 @@ def ChannelDecoupling(uncoupledData,coupledChannel,couplingParams,Fs,couplingSta
     nMDCTLines = len(coupledChannel) 
     nChannels = len(uncoupledData)
     couplingScales = couplingParams
-    mdctLineAssign = AssignMDCTLinesFromFreqLimits(nMDCTLines, Fs)
+    # this is in codingParams, would it be better to just pass codingParams to the function
+    # and call codingParams.sfBands.nLines?  would also have access to codingParams.nMDCTLines
+    mdctLineAssign = AssignMDCTLinesFromFreqLimits(nMDCTLines, Fs) 
     uncoupledLen = sum(mdctLineAssign[:couplingStart])
     coupledLen = nMDCTLines-uncoupledLen 
     phase_shift = couplingParams[0]

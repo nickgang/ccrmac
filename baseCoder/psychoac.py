@@ -224,6 +224,7 @@ def CalcSMRs(data, MDCTdata, MDCTscale, sampleRate, sfBands):
                 points. Then determines the maximum signal-to-mask ratio within
                 each critical band and returns that result in the SMR[] array.
     """
+    # db print "Psychoac: ", sfBands.nLines
     N = data.size
     maskThresh = getMaskedThreshold(data,MDCTdata,MDCTscale,sampleRate,sfBands) # Compute our masking curves
     MDCTdata = MDCTdata*np.power(2,float(-1*MDCTscale)) # Remove scale factor
@@ -242,15 +243,15 @@ def CalcSMRs(data, MDCTdata, MDCTscale, sampleRate, sfBands):
 
     for i in range(sfBands.nBands):
 
-        if(sfBands.upperLine[i]-(sfBands.lowerLine[i]) > 0):
+        if(len(smrVec[sfBands.lowerLine[i]:sfBands.upperLine[i]+1])>0):
             SMR[i] = np.max(smrVec[sfBands.lowerLine[i]:sfBands.upperLine[i]+1]) # Look at max SMR in this critical band
         else:
             SMR[i] = smrVec[sfBands.lowerLine[i]]
     return SMR
 
 def DetectTransient(data, codingParams):
-    fs = 48000
-    #fs = codingParams.sampleRate
+    #fs = 48000
+    fs = codingParams.sampleRate
     N = data.size
     MDCTdata = MDCT(SineWindow(data),N/2,N/2)
     sineWin = (1/float(N))*np.sum(np.power(SineWindow(np.ones_like(data)),2)) # Get avg pow of KBD window

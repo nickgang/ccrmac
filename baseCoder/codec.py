@@ -68,13 +68,16 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
         mdctLine /= rescaleLevel  # put overall gain back to original level
         mdctLines.append(mdctLine)
         
+    #print codingParams.couplingParams
     if codingParams.doSBR == True and len(mdctLines[0]) > 128: 
         #print len(mdctLines[0])
         mdctLines = np.array(mdctLines)
+        # better to just pass codingParams to channelDecoupling?
         mdctLines = ChannelDecoupling(mdctLines,codingParams.coupledChannel,codingParams.couplingParams,codingParams.sampleRate,codingParams.nCouplingStart)
         
     mdctLines = np.array(mdctLines)
     for iCh in range(codingParams.nChannels):
+        data.append(np.array([],dtype=np.float64))  # add location for this channel's data
         mdctLine = mdctLines[iCh]
         if codingParams.doSBR == True:
             ### SBR Decoder Module 1 - High Frequency Reconstruction ###
@@ -87,8 +90,11 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
 
         # IMDCT and window the data for this channel
         # data = SineWindow( IMDCT(mdctLine, halfN, halfN) )  # takes in halfN MDCT coeffs
-        data.append(SineWindow( IMDCT(mdctLine, a, b) ))  # takes in halfN MDCT coeffs
+        imdct = IMDCT(mdctLine, a, b)   # takes in halfN MDCT coeffs
+        data[iCh] = np.append(SineWindow(np.append(imdct[:a],np.zeros(a)))[:a],SineWindow(np.append(np.zeros(b),imdct[a:]))[b:])
+        #print data.size
     # end loop over channels, return reconstituted time samples (pre-overlap-and-add)
+    
     return data
 
 
@@ -116,19 +122,14 @@ def Encode(data,codingParams):
 def EncodeDataWithCoupling(data,codingParams):
     """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
     # NEW: Determine block type and set a,b
-    if(codingParams.blocksize == 3):
-        #print "MDCTLines: ", codingParams.nMDCTLines
-        a = codingParams.nMDCTLines
-        b = int(a*(float(SHORTBLOCKSIZE)/LONGBLOCKSIZE))
-    elif (codingParams.blocksize == 2):
-        a = int(codingParams.nMDCTLines*(float(SHORTBLOCKSIZE)/LONGBLOCKSIZE))
-        b = a
-    elif (codingParams.blocksize == 1):
-        b = codingParams.nMDCTLines
-        a = int(b*(float(SHORTBLOCKSIZE)/LONGBLOCKSIZE))
+    if(codingParams.blocksize < 2):
+        b = LONGBLOCKSIZE/2
     else:
-        a = codingParams.nMDCTLines
-        b = a
+        b = SHORTBLOCKSIZE/2
+    if(codingParams.blocksize == 1 or codingParams.blocksize == 2):
+        a = SHORTBLOCKSIZE/2
+    else:
+        a = LONGBLOCKSIZE/2
     N = a+b
     halfN = N/2
     #print "A: ", a
@@ -145,7 +146,7 @@ def EncodeDataWithCoupling(data,codingParams):
     # vectorizing the Mantissa function call
 #    vMantissa = np.vectorize(Mantissa)
     sfBands = codingParams.sfBands
-
+    # db print "Encode coupling: ", sfBands.nLines
     # NEW compute target bit rate based on block type
     bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
     bitBudget -=  nScaleBits*(sfBands.nBands + 1)  # less scale factor bits (including overall scale factor)
@@ -200,7 +201,7 @@ def EncodeDataWithCoupling(data,codingParams):
             bitAlloc = BitAllocSBR(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs,cutBin)
         else:
             bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
-    
+        # db print "Coding: ", bitAlloc
         # given the bit allocations, quantize the mdct lines in each band
         scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
         nMant = halfN
@@ -232,20 +233,15 @@ def EncodeDataWithCoupling(data,codingParams):
 
 def EncodeSingleChannel(data,codingParams,iCh):
     """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
-    # NEW: Determine block type and set a,b
-    if(codingParams.blocksize == 3):
-        #print "MDCTLines: ", codingParams.nMDCTLines
-        a = codingParams.nMDCTLines
-        b = int(a*(float(SHORTBLOCKSIZE)/LONGBLOCKSIZE))
-    elif (codingParams.blocksize == 2):
-        a = int(codingParams.nMDCTLines*(float(SHORTBLOCKSIZE)/LONGBLOCKSIZE))
-        b = a
-    elif (codingParams.blocksize == 1):
-        b = codingParams.nMDCTLines
-        a = int(b*(float(SHORTBLOCKSIZE)/LONGBLOCKSIZE))
+    # NEW: Determine block type and set a,b        
+    if(codingParams.blocksize < 2):
+        b = LONGBLOCKSIZE/2
     else:
-        a = codingParams.nMDCTLines
-        b = a
+        b = SHORTBLOCKSIZE/2
+    if(codingParams.blocksize == 1 or codingParams.blocksize == 2):
+        a = SHORTBLOCKSIZE/2
+    else:
+        a = LONGBLOCKSIZE/2
     N = a+b
     halfN = N/2
     #print "A: ", a
