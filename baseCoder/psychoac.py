@@ -278,8 +278,8 @@ def DetectTransient(data, codingParams):
     DT = delta > 1
     #print PE
     codingParams.prevPE = PE
-    #return (DT)
-    return True
+    return (DT)
+    #return True
     
 #-----------------------------------------------------------------------------
 

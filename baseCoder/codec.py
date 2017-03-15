@@ -64,8 +64,8 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
 
     # IMDCT and window the data for this channel
     # data = SineWindow( IMDCT(mdctLine, halfN, halfN) )  # takes in halfN MDCT coeffs
-    data = SineWindow( IMDCT(mdctLine, a, b) )  # takes in halfN MDCT coeffs
-
+    imdct = IMDCT(mdctLine, a, b)   # takes in halfN MDCT coeffs
+    data = np.append(SineWindow(np.append(imdct[:a],np.zeros(a)))[:a],SineWindow(np.append(np.zeros(b),imdct[a:]))[b:])
     # end loop over channels, return reconstituted time samples (pre-overlap-and-add)
     return data
 

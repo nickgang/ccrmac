@@ -443,9 +443,9 @@ if __name__=="__main__":
     trans = np.zeros(81)
     pes = np.zeros(81)
 
-    input_filename = "halfHarp.wav"
+    input_filename = "Castanets.wav"
     coded_filename = "coded.pac"
-    output_filename = "HarpHalftestblock128shortbitboost_1_6_allShort.wav"
+    output_filename = "Castanetstestblock128shortbitboost_1_6.wav"
     #output_filename = "testingblocks.wav"
     data_rate = 128000. # User defined data rate in bits/s/ch
 
