@@ -31,6 +31,14 @@ def calcSpecEnv(data,cutoff,fs,hfRecType=2):
             subBand[0:int(np.floor(cutBin/2))] = subBand[int(np.floor(cutBin/2)):cutBin]
         except:
             subBand[0:int(np.floor(cutBin/2))] = subBand[int(np.floor(cutBin/2)+1):cutBin]
+        # Calculate "tonalness" metric (~3 for filtered noise, ~30 for tonal test signal)
+        tonalness = np.max(subBand)/np.mean(subBand)
+        subSTD = np.std(subBand)
+        if tonalness>15:
+            # Add noise to peaky sub band for bins more than 1 STD below the mean
+            noiseBins = len(np.nonzero(subBand<np.mean(subBand)))
+            subBand[np.nonzero(subBand<np.mean(subBand))] += \
+                            np.absolute(np.random.normal(0,0.0001,noiseBins))
         # Add in additional high frequencies if there are less
         lowSize = int(len(subBand))
         highSize = int(len(XnI[cutBin:]))
@@ -60,7 +68,6 @@ def calcSpecEnv(data,cutoff,fs,hfRecType=2):
         # Spec Env is ratio of avg intensity in each hi-freq critical band to corresponding sub band
         specEnv[i]=highMean/subMean
     specEnv[np.nonzero(np.isnan(specEnv))] = 1 # Get rid of pesky nans
-    
     return specEnv
 
 ########## Decoder Methods ##########
