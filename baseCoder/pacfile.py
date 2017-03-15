@@ -90,7 +90,6 @@ import numpy as np  # to allow conversion of data blocks to numpy's array object
 MAX16BITS = 32767
 SHORTBLOCKSIZE = 256
 LONGBLOCKSIZE = 2048
-SHORTBLOCKBITBOOST = 1.6
 COUPLINGSTART = 20
 
 shortFreqLimits = np.array([200,400,630,920,1270,1720,2320,3150,4400,6400,9500,15500])
@@ -134,8 +133,6 @@ class PACFile(AudioFile):
         # Block Switching Stuff
         myParams.doBS = True
         myParams.blocksize = 0 # 0-3 to indicate which blocktype - not needed?
-        #myParams.longBlockSize = 2048
-        #myParams.shortBlockSize = 256
         # add in scale factor band information
         myParams.sfBands =sfBands
         myParams.doCoupling = False
@@ -166,17 +163,23 @@ class PACFile(AudioFile):
             pb = PackedBits()
             pb.SetPackedData(self.fp.read(nBytes))
             if pb.nBytes < nBytes: raise "error with coupling params"
-             # get BlockType / Size data
-            #if(codingParams.doBS):
-            couplingParams  = []
-            for i in range(nBytes-1): #1+(25-codingParams.nCouplingStart)*codingParams.nChannels):
-                couplingScale = pb.ReadBits(codingParams.nScaleBits)
-                couplingMant = pb.ReadBits(codingParams.nScaleBits) # nMantSizeBits?
-                #print couplingScale,couplingMant
-                couplingParams.append(codec.DequantizeFP(couplingScale,couplingMant,\
-                                                 codingParams.nScaleBits,codingParams.nScaleBits))
-            # db print "CouplingParams: ", couplingParams
-            codingParams.couplingParams = couplingParams
+            
+            if codingParams.doCoupling==True:
+           
+                
+                 # get BlockType / Size data
+                #if(codingParams.doBS):
+                couplingParams  = []
+                for i in range(nBytes-1): #1+(25-codingParams.nCouplingStart)*codingParams.nChannels):
+                    couplingScale = pb.ReadBits(codingParams.nScaleBits)
+                    couplingMant = pb.ReadBits(codingParams.nScaleBits) # nMantSizeBits?
+                    #print couplingScale,couplingMant
+                    couplingParams.append(codec.DequantizeFP(couplingScale,couplingMant,\
+                                                     codingParams.nScaleBits,codingParams.nScaleBits))
+                # db print "CouplingParams: ", couplingParams
+                codingParams.couplingParams = couplingParams
+
+                
             codingParams.blocksize = pb.ReadBits(2)
             # set a,b, nMDCTLines based on blocksize
             if(codingParams.blocksize < 2):
@@ -194,31 +197,27 @@ class PACFile(AudioFile):
             # Determine ScaleFactorBands for blocksize
             #if(codingParams.blocksize != 2):
             codingParams.sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(codingParams.nMDCTLines,
-                                                             codingParams.sampleRate))
-            #else:
-            #    codingParams.sfBands = ScaleFactorBands(AssignMDCTLinesFromFreqLimits(codingParams.nMDCTLines,
-            #                                                 codingParams.sampleRate, shortFreqLimits))
-            #print codingParams.sfBands.nLines
+                                                                 codingParams.sampleRate))
+        if codingParams.doCoupling==True:
+            s=self.fp.read(calcsize("<L"))
+            if s:
+                nBytes = unpack("<L",s)[0]
+                #print nBytes
+                #print nBytes
+                pb = PackedBits()
+                pb.SetPackedData(self.fp.read(nBytes))
+                if pb.nBytes < nBytes: raise "error with coupled channel"
+                coupledChannel = []
+                for i in range(nBytes): #1+(25-codingParams.nCouplingStart)*codingParams.nChannels):
+                    couplingScale = pb.ReadBits(codingParams.nScaleBits)
+                    couplingMant = pb.ReadBits(codingParams.nScaleBits) # nMantSizeBits?
 
-        s=self.fp.read(calcsize("<L"))
-        if s:
-            nBytes = unpack("<L",s)[0]
-            #print nBytes
-            #print nBytes
-            pb = PackedBits()
-            pb.SetPackedData(self.fp.read(nBytes))
-            if pb.nBytes < nBytes: raise "error with coupled channel"
-            coupledChannel = []
-            for i in range(nBytes): #1+(25-codingParams.nCouplingStart)*codingParams.nChannels):
-                couplingScale = pb.ReadBits(codingParams.nScaleBits)
-                couplingMant = pb.ReadBits(codingParams.nScaleBits) # nMantSizeBits?
-
-                coupledChannel.append(codec.DequantizeFP(couplingScale,couplingMant,\
-                                                 codingParams.nScaleBits,codingParams.nScaleBits))
-            # db print len(coupledChannel)
-            codingParams.coupledChannel = coupledChannel
-        #print codingParams.coupledChannel
-
+                    coupledChannel.append(codec.DequantizeFP(couplingScale,couplingMant,\
+                                                     codingParams.nScaleBits,codingParams.nScaleBits))
+                # db print len(coupledChannel)
+                codingParams.coupledChannel = coupledChannel
+            #print codingParams.coupledChannel
+            
         for iCh in range(codingParams.nChannels):
             data.append(np.array([],dtype=np.float64))  # add location for this channel's data
             # read in string containing the number of bytes of data for this channel (but check if at end of file!)
@@ -270,12 +269,13 @@ class PACFile(AudioFile):
             # CUSTOM DATA:
             # < now can unpack any custom data passed in the nBytes of data >
             # Grab each spectral envelope value and dequantize
-            for i in range(len(codingParams.specEnv[iCh])):
-                envScale = pb.ReadBits(codingParams.nScaleBits)
-                envMant = pb.ReadBits(codingParams.nScaleBits) # Sitcking with 4
-                # Dequantize this band of spectral envelope
-                codingParams.specEnv[iCh][i] = codec.DequantizeFP(envScale,envMant,\
-                                codingParams.nScaleBits,codingParams.nScaleBits)
+            if codingParams.doSBR==True:
+                for i in range(len(codingParams.specEnv[iCh])):
+                    envScale = pb.ReadBits(codingParams.nScaleBits)
+                    envMant = pb.ReadBits(codingParams.nScaleBits) # Sitcking with 4
+                    # Dequantize this band of spectral envelope
+                    codingParams.specEnv[iCh][i] = codec.DequantizeFP(envScale,envMant,\
+                                    codingParams.nScaleBits,codingParams.nScaleBits)
             scaleFactorFull.append(scaleFactor)
             bitAllocFull.append(bitAlloc)
             mantissaFull.append(mantissa)
@@ -350,7 +350,9 @@ class PACFile(AudioFile):
         (scaleFactor,bitAlloc,mantissa, overallScaleFactor) = self.Encode(fullBlockData,codingParams)  # returns a tuple with all the block-specific info not in the file header
         bitAlloc = np.array(bitAlloc)
         # db print "WDB: ", bitAlloc
-        nBytes = (2*codingParams.nScaleBits)*len(codingParams.couplingParams)
+        nBytes = 0
+        if codingParams.doCoupling==True:
+            nBytes = (2*codingParams.nScaleBits)*len(codingParams.couplingParams)
         # add two bits for block size if using blockswitching
         #if (codingParams.doBS):
         nBytes += 2  # for blocksize ID
@@ -363,35 +365,35 @@ class PACFile(AudioFile):
         pb = PackedBits()
         pb.Size(nBytes)
         #print len(codingParams.couplingParams)
-
-        for i in range(len(codingParams.couplingParams)):
-            couplingScale = codec.ScaleFactor(codingParams.couplingParams[i],codingParams.nScaleBits,4)
-            couplingMant = codec.MantissaFP(codingParams.couplingParams[i],couplingScale,codingParams.nScaleBits,4)
-            #print codingParams.couplingParams[i], couplingScale,couplingMant
-            pb.WriteBits(couplingScale,codingParams.nScaleBits)
-            pb.WriteBits(couplingMant,codingParams.nScaleBits)
-            # finally, write the data in this channel's PackedBits object to the output file
+        if codingParams.doCoupling==True:
+            for i in range(len(codingParams.couplingParams)):
+                couplingScale = codec.ScaleFactor(codingParams.couplingParams[i],codingParams.nScaleBits,4)
+                couplingMant = codec.MantissaFP(codingParams.couplingParams[i],couplingScale,codingParams.nScaleBits,4)
+                #print codingParams.couplingParams[i], couplingScale,couplingMant
+                pb.WriteBits(couplingScale,codingParams.nScaleBits)
+                pb.WriteBits(couplingMant,codingParams.nScaleBits)
+                # finally, write the data in this channel's PackedBits object to the output file
         pb.WriteBits(codingParams.blocksize,2)
         self.fp.write(pb.GetPackedData())
-
-        nBytes = (2*codingParams.nScaleBits)*len(codingParams.coupledChannel) # scaleBit for every sample?
-        #print nBytes
-        if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
-        else: nBytes = nBytes/BYTESIZE + 1
-        self.fp.write(pack("<L",int(nBytes))) # stores size as a little-endian unsigned long
-        #print nBytes
-            # create a PackedBits object to hold the nBytes of data for this channel/block of coded data
-        pb = PackedBits()
-        pb.Size(nBytes)
-        # db print "Coupled Channel size: ", len(codingParams.coupledChannel)
-        for i in range(len(codingParams.coupledChannel)):
-            couplingScale = codec.ScaleFactor(codingParams.coupledChannel[i],codingParams.nScaleBits,4)
-            couplingMant = codec.MantissaFP(codingParams.coupledChannel[i],couplingScale,codingParams.nScaleBits,4)
-            #print codingParams.couplingParams[i], couplingScale,couplingMant
-            pb.WriteBits(couplingScale,codingParams.nScaleBits)
-            pb.WriteBits(couplingMant,codingParams.nScaleBits)
-            # finally, write the data in this channel's PackedBits object to the output file
-        self.fp.write(pb.GetPackedData())
+        if codingParams.doCoupling==True:
+            nBytes = (2*codingParams.nScaleBits)*len(codingParams.coupledChannel) # scaleBit for every sample?
+            #print nBytes
+            if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
+            else: nBytes = nBytes/BYTESIZE + 1
+            self.fp.write(pack("<L",int(nBytes))) # stores size as a little-endian unsigned long
+            #print nBytes
+                # create a PackedBits object to hold the nBytes of data for this channel/block of coded data
+            pb = PackedBits()
+            pb.Size(nBytes)
+            # db print "Coupled Channel size: ", len(codingParams.coupledChannel)
+            for i in range(len(codingParams.coupledChannel)):
+                couplingScale = codec.ScaleFactor(codingParams.coupledChannel[i],codingParams.nScaleBits,4)
+                couplingMant = codec.MantissaFP(codingParams.coupledChannel[i],couplingScale,codingParams.nScaleBits,4)
+                #print codingParams.couplingParams[i], couplingScale,couplingMant
+                pb.WriteBits(couplingScale,codingParams.nScaleBits)
+                pb.WriteBits(couplingMant,codingParams.nScaleBits)
+                # finally, write the data in this channel's PackedBits object to the output file
+                self.fp.write(pb.GetPackedData())
 
 
         nBytes = 0
@@ -444,11 +446,12 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can add in custom data if space allocated in nBytes above>
-            for i in range(len(codingParams.specEnv[iCh])):
-                envScale = codec.ScaleFactor(codingParams.specEnv[iCh][i],codingParams.nScaleBits,4)
-                pb.WriteBits(envScale,codingParams.nScaleBits)
-                # Hardcoding 4 Mantissa bits, using floating-point to quantize
-                pb.WriteBits(codec.MantissaFP(codingParams.specEnv[iCh][i],envScale,codingParams.nScaleBits,4),codingParams.nScaleBits)
+            if codingParams.doSBR==True:
+                for i in range(len(codingParams.specEnv[iCh])):
+                    envScale = codec.ScaleFactor(codingParams.specEnv[iCh][i],codingParams.nScaleBits,4)
+                    pb.WriteBits(envScale,codingParams.nScaleBits)
+                    # Hardcoding 4 Mantissa bits, using floating-point to quantize
+                    pb.WriteBits(codec.MantissaFP(codingParams.specEnv[iCh][i],envScale,codingParams.nScaleBits,4),codingParams.nScaleBits)
             self.fp.write(pb.GetPackedData())
 
 
@@ -503,14 +506,14 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "halfHarp.wav"
+    input_filename = "casttest.wav"
     coded_filename = "coded.pac"
-    data_rate = 64000. # User defined data rate in bits/s/ch
+    data_rate = 128000. # User defined data rate in bits/s/ch
     cutoff = 5300 # Global SBR cutoff
     couplingFrequency = 3700
-    output_filename = input_filename[:-4] + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
+    output_filename = "cast_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
-    doSBR = True
+    doSBR = False
     doCoupling = False
 
     if len(sys.argv) > 1:
@@ -634,8 +637,8 @@ if __name__=="__main__":
                 codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*K)- \
                  (6+codingParams.sfBands.nBands*(codingParams.nScaleBits+codingParams.nMantSizeBits)+\
                  codingParams.nSpecEnvBits*len(codingParams.specEnv)))/K
-                # boost bit budget for short blocks
-                if(codingParams.blocksize==2):codingParams.targetBitsPerSample *= SHORTBLOCKBITBOOST
+                # # boost bit budget for short blocks
+                # if(codingParams.blocksize==2):codingParams.targetBitsPerSample *= SHORTBLOCKBITBOOST
             else: # decoding
                 data = inFile.ReadDataBlock(codingParams)
 
