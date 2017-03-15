@@ -70,7 +70,17 @@ class PCMFile(AudioFile):
         
         
         # read a block of nSamplesPerBlock*nChannels*bytesPerSample bytes from the file (where nSamples is set by coding file before reading)
-        bytesToRead = codingParams.nSamplesPerBlock*codingParams.nChannels*(codingParams.bitsPerSample/BYTESIZE)
+        bytesToRead = (codingParams.nSamplesPerBlock)*codingParams.nChannels*(codingParams.bitsPerSample/BYTESIZE)
+        
+        if codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE)+codingParams.shortBlockSize/2 - codingParams.bytesReadSoFar <= 0:
+            transBlock = None
+        elif codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar < bytesToRead:
+            dataBlock = self.fp.read(codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar)
+        else:
+            dataBlock = self.fp.read(bytesToRead)
+        
+        
+        
         if codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar <= 0:
             dataBlock = None
         elif codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar < bytesToRead:

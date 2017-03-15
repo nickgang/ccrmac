@@ -100,7 +100,6 @@ class PackedBits:
         # update bit pointer
         self.iBit=bitsLeft
 
-
     def ReadBits(self,nBits):
         """Returns next nBits of info from this PackedBits object starting at its current byte/bit pointers"""
 
@@ -169,6 +168,11 @@ class PackedBits:
 
         # return info read out of data
         return info
+        
+    def MoveBackPointers(self, nBits):
+        """Moves the pointers back nBits bits"""
+        self.iByte -= int(nBits/BYTESIZE)
+        self.iBit -= nBits%BYTESIZE
 
     def ResetPointers(self):
         """Resets the pointers to the start of this PackedBits object (for example, to read out data that's been written in)"""
