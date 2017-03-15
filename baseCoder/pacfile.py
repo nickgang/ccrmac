@@ -506,12 +506,12 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "halfHarp.wav"
+    input_filename = "Castanets.wav"
     coded_filename = "coded.pac"
     data_rate = 128000. # User defined data rate in bits/s/ch
     cutoff = 5300 # Global SBR cutoff
     couplingFrequency = 3700
-    output_filename = "cast_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
+    output_filename = input_filename[:-4] + "_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
     doSBR = False
     doCoupling = False
@@ -552,6 +552,7 @@ if __name__=="__main__":
             codingParams.prevPE = 10
             codingParams.blocksize = 0
             codingParams.bitReservoir = 0
+            codingParams.shortBlockSize = SHORTBLOCKSIZE
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = LONGBLOCKSIZE/2
             # SBR related stuff
@@ -592,6 +593,7 @@ if __name__=="__main__":
             if(Direction == "Encode"):
                 newBlock = False
                 if(codingParams.blocksize < 2 or (codingParams.blocksize > 1 and len(nextData[0]) < SHORTBLOCKSIZE/2)):
+                    transData = inFile.ReadTransientTestBlock(codingParams)
                     nextData = inFile.ReadDataBlock(codingParams)
                     newBlock = True
                     if not nextData: break # end of file
@@ -603,7 +605,7 @@ if __name__=="__main__":
                     codingParams.nMDCTLines = (SHORTBLOCKSIZE)/2
                     #K = codingParams.nMDCTLines*(2* float(SHORTBLOCKSIZE)/LONGBLOCKSIZE)
                     # assumes stereo input file
-                elif (len(data[0]) != 0 and newBlock and (DetectTransient(nextData[0],codingParams) or DetectTransient(nextData[1], codingParams))):
+                elif (len(data[0]) != 0 and newBlock and (DetectTransient(transData[0],codingParams) or DetectTransient(transData[1], codingParams))):
                     if(codingParams.blocksize < 2):
                         codingParams.blocksize = 3
                         codingParams.nMDCTLines = (SHORTBLOCKSIZE + LONGBLOCKSIZE)/4

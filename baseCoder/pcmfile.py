@@ -67,20 +67,8 @@ class PCMFile(AudioFile):
     def ReadDataBlock(self,codingParams):
         """Reads a block of data from a PCMFile object that has already executed OpenForReading and returns those samples as signed-fraction data"""
         
-        
-        
-        # read a block of nSamplesPerBlock*nChannels*bytesPerSample bytes from the file (where nSamples is set by coding file before reading)
-        bytesToRead = (codingParams.nSamplesPerBlock)*codingParams.nChannels*(codingParams.bitsPerSample/BYTESIZE)
-        
-#        if codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE)+codingParams.shortBlockSize/2 - codingParams.bytesReadSoFar <= 0:
-#            transBlock = None
-#        elif codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar < bytesToRead:
-#            dataBlock = self.fp.read(codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar)
-#        else:
-#            dataBlock = self.fp.read(bytesToRead)
-        
-        
-        
+        bytesToRead = (codingParams.nSamplesPerBlock)*codingParams.nChannels*(codingParams.bitsPerSample/BYTESIZE)       
+
         if codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar <= 0:
             dataBlock = None
         elif codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar < bytesToRead:
@@ -114,6 +102,45 @@ class PCMFile(AudioFile):
         # return data
         return data
 
+        
+    def ReadTransientTestBlock(self,codingParams):
+        """Reads a block of data from a PCMFile object that has already executed OpenForReading and returns those samples as signed-fraction data"""
+        
+        bytesToRead = (codingParams.nSamplesPerBlock+codingParams.shortBlockSize/2)*codingParams.nChannels*(codingParams.bitsPerSample/BYTESIZE)       
+        blockStart = self.fp.tell()
+        if codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar <= 0:
+            dataBlock = None
+        elif codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar < bytesToRead:
+            dataBlock = self.fp.read(codingParams.nChannels*codingParams.numSamples*(codingParams.bitsPerSample/BYTESIZE) - codingParams.bytesReadSoFar)
+            self.fp.seek(blockStart)
+        else:
+            dataBlock = self.fp.read(bytesToRead)
+            self.fp.seek(blockStart)
+        #codingParams.bytesReadSoFar += bytesToRead
+        if dataBlock and len(dataBlock)<bytesToRead:  # got data but not as much as expected
+            # this was a partial block, zero pad
+            dataBlock += (bytesToRead-len(dataBlock))*"\0"
+        elif not dataBlock: return  # stop if nothing read
+        # convert block of bytes into block of uniformly quantized codes, dequantize them, and parse into channels
+        if codingParams.bitsPerSample == 16:
+            # Uses '<h' format code in struct to convert little-endian pairs of bits into short integers
+            dataBlock=unpack("<"+str((codingParams.nSamplesPerBlock+codingParams.shortBlockSize/2)*codingParams.nChannels)+"h",dataBlock)  # asumes nSamples*nChannels SIGNED short ints
+#            dataBlock=np.fromstring(dataBlock,dtype=np.int16)  # uses Local Endian conversion -- use byteswap() method if wrong Endian
+        else: raise Exception("PCMFile was not 16-bit PCM in PCMFile.ReadDataBlock!")
+        # parse samples into channels and dequantize into signed-fraction floating point numbers
+        data = [] # this is where the signed-fraction samples will reside for each channel
+        for iCh in range(codingParams.nChannels):
+            # slice out this channel's interleaved 16-bit PCM codes (and make sure it is a numpy array)
+            codes = np.asarray(dataBlock[iCh::codingParams.nChannels])
+            # extract signs
+            signs = np.signbit(codes)
+            codes[signs] *= -1  # now codes are positive
+            # dequantize, return signs, and put result as data[iCh]
+            temp = vDequantizeUniform(codes,16)
+            temp[signs] *= -1.  # returns signs
+            data.append(temp)  # data[iCh]
+        # return data
+        return data
 
     def WriteFileHeader(self,codingParams):
         """Writes the WAV file header to a just-opened WAV file and uses object attributes for the header data.  File pointer ends at start of data portion."""
