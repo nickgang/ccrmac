@@ -4,18 +4,13 @@ data to an audio file holding data compressed using an MDCT-based perceptual aud
 coding algorithm.  The MDCT lines of each audio channel are grouped into bands,
 each sharing a single scaleFactor and bit allocation that are used to block-
 floating point quantize those lines.  This class is a subclass of AudioFile.
-
 -----------------------------------------------------------------------
 © 2009 Marina Bosi & Richard E. Goldberg -- All rights reserved
 -----------------------------------------------------------------------
-
 See the documentation of the AudioFile class for general use of the AudioFile
 class.
-
 Notes on reading and decoding PAC files:
-
     The OpenFileForReading() function returns a CodedParams object containing:
-
         nChannels = the number of audio channels
         sampleRate = the sample rate of the audio samples
         numSamples = the total number of samples in the file for each channel
@@ -25,22 +20,16 @@ Notes on reading and decoding PAC files:
         nMantSizeBits = the number of bits storing mantissa bit allocations
         sfBands = a ScaleFactorBands object
         overlapAndAdd = decoded data from the prior block (initially all zeros)
-
     The returned ScaleFactorBands object, sfBands, contains an allocation of
     the MDCT lines into groups that share a single scale factor and mantissa bit
     allocation.  sfBands has the following attributes available:
-
         nBands = the total number of scale factor bands
         nLines[iBand] = the number of MDCT lines in scale factor band iBand
         lowerLine[iBand] = the first MDCT line in scale factor band iBand
         upperLine[iBand] = the last MDCT line in scale factor band iBand
-
-
 Notes on encoding and writing PAC files:
-
     When writing to a PACFile the CodingParams object passed to OpenForWriting()
     should have the following attributes set:
-
         nChannels = the number of audio channels
         sampleRate = the sample rate of the audio samples
         numSamples = the total number of samples in the file for each channel
@@ -49,31 +38,23 @@ Notes on encoding and writing PAC files:
         nScaleBits = the number of bits storing scale factors
         nMantSizeBits = the number of bits storing mantissa bit allocations
         targetBitsPerSample = the target encoding bit rate in units of bits per sample
-
     The first three attributes (nChannels, sampleRate, and numSamples) are
     typically added by the original data source (e.g. a PCMFile object) but
     numSamples may need to be extended to account for the MDCT coding delay of
     nMDCTLines and any zero-padding done in the final data block
-
     OpenForWriting() will add the following attributes to be used during the encoding
     process carried out in WriteDataBlock():
-
         sfBands = a ScaleFactorBands object
         priorBlock = the prior block of audio data (initially all zeros)
-
     The passed ScaleFactorBands object, sfBands, contains an allocation of
     the MDCT lines into groups that share a single scale factor and mantissa bit
     allocation.  sfBands has the following attributes available:
-
         nBands = the total number of scale factor bands
         nLines[iBand] = the number of MDCT lines in scale factor band iBand
         lowerLine[iBand] = the first MDCT line in scale factor band iBand
         upperLine[iBand] = the last MDCT line in scale factor band iBand
-
 Description of the PAC File Format:
-
     Header:
-
         tag                 4 byte file tag equal to "PAC "
         sampleRate          little-endian unsigned long ("<L" format in struct)
         nChannels           little-endian unsigned short("<H" format in struct)
@@ -84,9 +65,7 @@ Description of the PAC File Format:
         nSFBands            little-endian unsigned long ("<L" format in struct)
         for iBand in range(nSFBands):
             nLines[iBand]   little-endian unsigned short("<H" format in struct)
-
     Each Data Block:  (reads data blocks until end of file hit)
-
         for iCh in range(nChannels):
             nBytes          little-endian unsigned long ("<L" format in struct)
             as bits packed into an array of nBytes bytes:
@@ -98,7 +77,6 @@ Description of the PAC File Format:
                         for m in nLines[iBand]:
                             mantissa[iCh][iBand][m]     bitAlloc[iCh][iBand]+1 bits
                 <extra custom data bits as long as space is included in nBytes>
-
 """
 
 from audiofile import * # base class
@@ -525,7 +503,7 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "sbrTest.wav"
+    input_filename = "halfHarp.wav"
     coded_filename = "coded.pac"
     data_rate = 128000. # User defined data rate in bits/s/ch
     cutoff = 5300 # Global SBR cutoff
@@ -570,9 +548,9 @@ if __name__=="__main__":
             codingParams.nMantSizeBits = 4
             codingParams.prevPE = 10
             codingParams.blocksize = 0
+            codingParams.bitReservoir = 0
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = LONGBLOCKSIZE/2
-            codingParams.bitReservoir = 0
             # SBR related stuff
             codingParams.sbrCutoff = cutoff # Specified in Hz
             codingParams.doSBR = doSBR # For toggling SBR algorithm

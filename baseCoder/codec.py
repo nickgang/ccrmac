@@ -1,6 +1,5 @@
 ﻿"""
 codec.py -- The actual encode/decode functions for the perceptual audio codec
-
 -----------------------------------------------------------------------
 © 2009 Marina Bosi & Richard E. Goldberg -- All rights reserved
 -----------------------------------------------------------------------
