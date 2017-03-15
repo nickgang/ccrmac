@@ -160,7 +160,7 @@ class PACFile(AudioFile):
         #myParams.shortBlockSize = 256
         # add in scale factor band information
         myParams.sfBands =sfBands
-        myParams.doCoupling = True
+        myParams.doCoupling = False
         myParams.nCouplingStart = COUPLINGSTART
         # start w/o all zeroes as data from prior block to overlap-and-add for output
         overlapAndAdd = []
@@ -525,15 +525,15 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "glock_trim.wav"
+    input_filename = "sbrTest.wav"
     coded_filename = "coded.pac"
     data_rate = 128000. # User defined data rate in bits/s/ch
     cutoff = 5300 # Global SBR cutoff
     couplingFrequency = 3700
-    output_filename = "glock_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
+    output_filename = "sbrTest_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
     doSBR = True
-    doCoupling = True
+    doCoupling = False
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]

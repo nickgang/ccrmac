@@ -105,7 +105,7 @@ def Encode(data,codingParams):
     overallScaleFactor = []
     codingParams.couplingParams = np.zeros(1+((25-codingParams.nCouplingStart)*codingParams.nChannels)).astype(float)
     codingParams.coupledChannel = np.ones(codingParams.nMDCTLines,np.float64)*0.5
-    if codingParams.doSBR:
+    if codingParams.doSBR and codingParams.doCoupling:
         (scaleFactor,bitAlloc,mantissa,overallScaleFactor) = EncodeDataWithCoupling(np.array(data),codingParams)
     else:
         # loop over channels and separately encode each one
