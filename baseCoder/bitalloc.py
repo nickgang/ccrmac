@@ -111,7 +111,7 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
     return mantBits
 
 # Bit Alloc Function to be used with SBR Module
-def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, cutBin=25):
+def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, cutBand=25):
     """
     Allocates bits to scale factor bands so as to flatten the NMR across the spectrum
 
@@ -126,12 +126,12 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, cutBin=25):
         Return:
             bits[nBands] is number of bits allocated to each scale factor band
     """
-    cutBin = int(cutBin) # Make sure this is an integer
-    mantBits = np.zeros_like(nLines[0:cutBin+1],dtype=int)
-    localSMR = np.array(SMR,copy=True)[0:cutBin+1] # SMR of sub band
-    subBand = np.array(nLines,copy=True)[0:cutBin+1]
+    cutBin = int(cutBand) # Make sure this is an integer
+    mantBits = np.zeros_like(nLines[0:cutBand+1],dtype=int)
+    localSMR = np.array(SMR,copy=True)[0:cutBand+1] # SMR of sub band
+    subBand = np.array(nLines,copy=True)[0:cutBand+1]
     allocBits = 0
-    
+
     # db print "SubBand: ", subBand
 
     while allocBits < bitBudget:
@@ -147,7 +147,7 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, cutBin=25):
                         allocBits += subBand[maxSMR]
                         mantBits[maxSMR] += 1
                         localSMR[maxSMR] -= 6
-    
+
                 break
             else:
                 allocBits += subBand[maxSMR]
@@ -171,7 +171,7 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, cutBin=25):
                 badBand[i] = False
             else:
                 badBand[i] = False
-    
+
     mantBits = np.minimum(mantBits, np.ones_like(mantBits)*maxMantBits)
     # db print mantBits
     sbrBits = np.append(mantBits,np.zeros(len(nLines)-len(subBand))) # Add zeros back in for HF band
