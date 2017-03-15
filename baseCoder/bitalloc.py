@@ -103,16 +103,13 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR, bitReservoir, blocksiz
         # Pick lonely bit in highest critical band possible
         i = np.max(np.argwhere(mantBits==1))
         mantBits[i] = 0
-        badBand[i] = False
+        
         bitBudget += nLines[i]
         i = np.arange(nBands)[badBand][np.argmax(((SMR*(nLines>0))-mantBits*6)[badBand])]
         if (bitBudget + (bitReservoir*(blocksize==2)) -nLines[i]) >= 0 and nLines[i] > 0 and localSMR[i] > bitFloor:
             mantBits[i] += 1
             bitBudget -= nLines[i]
-            if mantBits[i] >= maxMantBits:
-                badBand[i] = False
-            else:
-                badBand[i] = False
+        badBand[i] = False
 
     mantBits = np.minimum(mantBits, np.ones_like(mantBits)*maxMantBits)
     return mantBits
@@ -173,18 +170,14 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, bitReservoir, block
         # Pick lonely bit in highest critical band possible
         i = np.max(np.argwhere(mantBits==1))
         mantBits[i] = 0
-        badBand[i] = False
         bitBudget += subBand[i]
         i = (np.arange(cutBin+1)[badBand])[np.argmax(((SMR[0:cutBin+1]*(subBand>0))-mantBits*6)[badBand])]
         if (bitBudget + (bitReservoir*(blocksize==2)) -subBand[i]) >= 0 and subBand[i] > 0 and localSMR[i] > bitFloor:
             mantBits[i] += 1
             localSMR[i] -= 6
             bitBudget -= subBand[i]
-            if mantBits[i] >= maxMantBits:
-                badBand[i] = False
-            else:
-                badBand[i] = False
-    
+        badBand[i] = False    
+
     mantBits = np.minimum(mantBits, np.ones_like(mantBits)*maxMantBits)
     # db print mantBits
     sbrBits = np.append(mantBits,np.zeros(len(nLines)-len(subBand))) # Add zeros back in for HF band

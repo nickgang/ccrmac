@@ -506,7 +506,7 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "casttest.wav"
+    input_filename = "halfHarp.wav"
     coded_filename = "coded.pac"
     data_rate = 128000. # User defined data rate in bits/s/ch
     cutoff = 5300 # Global SBR cutoff

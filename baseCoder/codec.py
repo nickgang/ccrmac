@@ -191,7 +191,6 @@ def EncodeDataWithCoupling(data,codingParams):
         # compute the mantissa bit allocations
         # compute SMRs in side chain FFT
         SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
-
         if codingParams.doSBR == True:
             # Critical band starting here are above cutoff
             cutBin = freqToBand(codingParams.sbrCutoff)
@@ -200,10 +199,10 @@ def EncodeDataWithCoupling(data,codingParams):
         else:
             bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs, codingParams.bitReservoir, codingParams.blocksize)
         codingParams.bitReservoir += bitBudget - np.sum(bitAlloc * sfBands.nLines)
-        print "blocksize: ", codingParams.blocksize
-        print "Bit Reservoir: ", codingParams.bitReservoir
-        if codingParams.blocksize == 2:
-            print bitAlloc
+        # db print "blocksize: ", codingParams.blocksize
+        # db print "Bit Reservoir: ", codingParams.bitReservoir
+        # db if codingParams.blocksize == 2:
+        # db     print bitAlloc
         # given the bit allocations, quantize the mdct lines in each band
         scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
         nMant = halfN
@@ -295,7 +294,6 @@ def EncodeSingleChannel(data,codingParams,iCh):
     # compute the mantissa bit allocations
     # compute SMRs in side chain FFT
     SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
-
     if codingParams.doSBR == True:
         # Critical band starting here are above cutoff
         cutBin = freqToBand(codingParams.sbrCutoff)
@@ -304,10 +302,10 @@ def EncodeSingleChannel(data,codingParams,iCh):
     else:
         bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs, codingParams.bitReservoir, codingParams.blocksize)
     codingParams.bitReservoir += bitBudget - np.sum(bitAlloc * sfBands.nLines)
-    print "blocksize: ", codingParams.blocksize
-    print "Bit Reservoir: ", codingParams.bitReservoir
-    if codingParams.blocksize == 2:
-        print bitAlloc
+    # db print "blocksize: ", codingParams.blocksize
+    # db print "Bit Reservoir: ", codingParams.bitReservoir
+    # db if codingParams.blocksize == 2:
+    # db    print bitAlloc
     # given the bit allocations, quantize the mdct lines in each band
     scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
     nMant = halfN
