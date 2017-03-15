@@ -505,12 +505,12 @@ if __name__=="__main__":
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
     input_filename = "halfHarp.wav"
     coded_filename = "coded.pac"
-    data_rate = 128000. # User defined data rate in bits/s/ch
+    data_rate = 64000. # User defined data rate in bits/s/ch
     cutoff = 5300 # Global SBR cutoff
     couplingFrequency = 3700
-    output_filename = "sbrTest_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
+    output_filename = input_filename[:-4] + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
-    doSBR = False
+    doSBR = True
     doCoupling = False
 
     if len(sys.argv) > 1:

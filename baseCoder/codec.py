@@ -200,7 +200,10 @@ def EncodeDataWithCoupling(data,codingParams):
         else:
             bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs, codingParams.bitReservoir, codingParams.blocksize)
         codingParams.bitReservoir += bitBudget - np.sum(bitAlloc * sfBands.nLines)
+        print "blocksize: ", codingParams.blocksize
         print "Bit Reservoir: ", codingParams.bitReservoir
+        if codingParams.blocksize == 2:
+            print bitAlloc
         # given the bit allocations, quantize the mdct lines in each band
         scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
         nMant = halfN
@@ -301,7 +304,10 @@ def EncodeSingleChannel(data,codingParams,iCh):
     else:
         bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs, codingParams.bitReservoir, codingParams.blocksize)
     codingParams.bitReservoir += bitBudget - np.sum(bitAlloc * sfBands.nLines)
+    print "blocksize: ", codingParams.blocksize
     print "Bit Reservoir: ", codingParams.bitReservoir
+    if codingParams.blocksize == 2:
+        print bitAlloc
     # given the bit allocations, quantize the mdct lines in each band
     scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
     nMant = halfN

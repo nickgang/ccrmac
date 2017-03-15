@@ -75,7 +75,7 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR, bitReservoir, blocksiz
         bitFloor = -12  # bitFloor for long blocks
     
     # remove '*(blocksize==2)' in four places to have all blocks take from reservoir
-    while allocBits < (bitBudget + (bitReservoir*(blocksize==2))) or np.maximum(localSMR) < bitFloor:
+    while allocBits < (bitBudget + (bitReservoir*(blocksize==2))) or max(localSMR) < bitFloor:
         smrSort = np.argsort(localSMR)[::-1]
         maxSMR = smrSort[0]
         if nLines[maxSMR] > 0:
@@ -139,12 +139,12 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, bitReservoir, block
     subBand = np.array(nLines,copy=True)[0:cutBin+1]
     allocBits = 0
     if blocksize == 2:
-        bitFloor = -18  # bitFloor for short blocks
+        bitFloor = -12  # bitFloor for short blocks
     else:
-        bitFloor = -12 # bitFloor for long blocks
+        bitFloor = -9 # bitFloor for long blocks
     
     # remove '*(blocksize==2)' in four places to have all blocks take from reservoir
-    while allocBits < (bitBudget + (bitReservoir*(blocksize==2))) or np.maximum(localSMR) < bitFloor:
+    while allocBits < (bitBudget + (bitReservoir*(blocksize==2))) or max(localSMR) < bitFloor:
         smrSort = np.argsort(localSMR)[::-1]
         maxSMR = smrSort[0]
         if subBand[maxSMR] > 0:
@@ -175,7 +175,7 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, bitReservoir, block
         mantBits[i] = 0
         badBand[i] = False
         bitBudget += subBand[i]
-        i = (np.arange(cutBin+1)[badBand])[np.argmax(((SMR*(subBand>0))-mantBits*6)[badBand])]
+        i = (np.arange(cutBin+1)[badBand])[np.argmax(((SMR[0:cutBin+1]*(subBand>0))-mantBits*6)[badBand])]
         if (bitBudget + (bitReservoir*(blocksize==2)) -subBand[i]) >= 0 and subBand[i] > 0 and localSMR[i] > bitFloor:
             mantBits[i] += 1
             localSMR[i] -= 6
