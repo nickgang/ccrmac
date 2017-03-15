@@ -150,9 +150,9 @@ class PACFile(AudioFile):
         myParams.nMantSizeBits = nMantSizeBits
         # SBR Stuff
         myParams.sbrCutoff = 5300 # Specified in Hz
-        myParams.doSBR = True # For toggling SBR algorithm
+        myParams.doSBR = False # For toggling SBR algorithm
         myParams.nSpecEnvBits = 8 # number of bits per spectral envelope band
-        myParams.specEnv = np.zeros((nChannels,24-codec.freqToBand(myParams.sbrCutoff)))
+        myParams.specEnv = np.zeros((nChannels,int(24-codec.freqToBand(myParams.sbrCutoff))))
         # Block Switching Stuff
         myParams.doBS = True
         myParams.blocksize = 0 # 0-3 to indicate which blocktype - not needed?
@@ -532,7 +532,7 @@ if __name__=="__main__":
     couplingFrequency = 3700
     output_filename = "sbrTest_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
-    doSBR = True
+    doSBR = False
     doCoupling = False
 
     if len(sys.argv) > 1:
@@ -576,7 +576,7 @@ if __name__=="__main__":
             codingParams.sbrCutoff = cutoff # Specified in Hz
             codingParams.doSBR = doSBR # For toggling SBR algorithm
             codingParams.nSpecEnvBits = nSpecEnvBits # Bits per band in spectral envelope
-            codingParams.specEnv  = np.zeros((codingParams.nChannels,24-codec.freqToBand(codingParams.sbrCutoff)))
+            codingParams.specEnv  = np.zeros((codingParams.nChannels,int(24-codec.freqToBand(codingParams.sbrCutoff))))
 
             codingParams.doCoupling = doCoupling
             codingParams.nCouplingStart = COUPLINGSTART
