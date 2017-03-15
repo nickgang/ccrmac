@@ -23,6 +23,7 @@ def calcSpecEnv(data,cutoff,fs,hfRecType=2):
     hannWin = (1/float(N))*np.sum(np.power(w.HanningWindow(np.ones_like(data)),2)) # Get avg pow of hann window
     XnI = (4/(np.power(N,2)*hannWin))*(np.power(np.abs(Xn),2)) # Compute values of FFT intensity
     # Transpose down top half of subband if we're using altered alg
+    XnI = XnI[0:N/2]
     cutBin = freqToBinFFT(N,cutoff,fs)
     subBand = np.array(XnI[0:cutBin],copy=True)
     if hfRecType==2:
@@ -49,15 +50,17 @@ def calcSpecEnv(data,cutoff,fs,hfRecType=2):
     nHfBands = len(bandLimits)-cutBand # How many bands will be reconstructed
     specEnv = np.zeros(nHfBands-1)
 
+    recBand = np.append(XnI[0:cutBin],subBand)
     for i in range(nHfBands-1):
         bandLines = np.intersect1d(np.argwhere(freqVec>bandLimits[cutBand+i]),\
                                    np.argwhere(freqVec<=bandLimits[cutBand+i+1]))
         highMean = np.mean(XnI[bandLines])
-        subSlice = subBand[i*len(bandLines):(i+1)*len(bandLines)]
+        subSlice = recBand[bandLines]
         subMean = np.mean(subSlice)
         # Spec Env is ratio of avg intensity in each hi-freq critical band to corresponding sub band
         specEnv[i]=highMean/subMean
     specEnv[np.nonzero(np.isnan(specEnv))] = 1 # Get rid of pesky nans
+
     return specEnv
 
 ########## Decoder Methods ##########
@@ -78,19 +81,18 @@ def HiFreqRec(mdctLines,fs,cutoff,hfRecType=2):
             lowerBand[0:int(np.floor(cutBin/2))] = lowerBand[int(np.floor(cutBin/2)+1):cutBin]
         # Add in additional high frequencies if reconstructed bin doesn't go all the way to nyquist
         lowSize = int(len(lowerBand))
-        highSize = int(nMDCT-lowSize)
+        highSize = int(len(mdctLines[cutBin:]))
         if lowSize<highSize:
             multiples = highSize/lowSize
             diff = highSize%lowSize
+            addition = np.array(lowerBand,copy=True) # This is the piece to add in each time
             # Add in more copies of low band until sizes are comparable
             for m in range(multiples-1):
-                np.append(lowerBand,lowerBand)
+                lowerBand = np.append(lowerBand,addition)
             if diff!=0:
                 subBand = np.append(lowerBand,np.zeros(diff))
                 lowerBand[-diff:] = lowerBand[0:diff]
-
         mdctLines[cutBin+1:cutBin+len(lowerBand)+1] = lowerBand # Do the transposition
-
     return mdctLines.astype(float) # If these are ints it can cause problems
 
 # Additional High Frequency Components
