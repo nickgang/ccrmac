@@ -572,6 +572,7 @@ if __name__=="__main__":
             codingParams.blocksize = 0 
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = LONGBLOCKSIZE/2
+            codingParams.bitReservoir = 0
             # SBR related stuff
             codingParams.sbrCutoff = cutoff # Specified in Hz
             codingParams.doSBR = doSBR # For toggling SBR algorithm

@@ -198,10 +198,11 @@ def EncodeDataWithCoupling(data,codingParams):
             # Critical band starting here are above cutoff
             cutBin = freqToBand(codingParams.sbrCutoff)
             # perform bit allocation using SMR results
-            bitAlloc = BitAllocSBR(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs,cutBin)
+            bitAlloc = BitAllocSBR(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs, codingParams.bitReservoir, codingParams.blocksize, cutBin)
         else:
-            bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
-        # db print "Coding: ", bitAlloc
+            bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs, codingParams.bitReservoir, codingParams.blocksize)
+        codingParams.bitReservoir += bitBudget - np.sum(bitAlloc * sfBands.nLines)
+        print "Bit Reservoir: ", codingParams.bitReservoir
         # given the bit allocations, quantize the mdct lines in each band
         scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
         nMant = halfN
@@ -298,10 +299,11 @@ def EncodeSingleChannel(data,codingParams,iCh):
         # Critical band starting here are above cutoff
         cutBin = freqToBand(codingParams.sbrCutoff)
         # perform bit allocation using SMR results
-        bitAlloc = BitAllocSBR(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs,cutBin)
+        bitAlloc = BitAllocSBR(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs, codingParams.bitReservoir, codingParams.blocksize, cutBin)
     else:
-        bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
-
+        bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs, codingParams.bitReservoir, codingParams.blocksize)
+    codingParams.bitReservoir += bitBudget - np.sum(bitAlloc * sfBands.nLines)
+    print "Bit Reservoir: ", codingParams.bitReservoir
     # given the bit allocations, quantize the mdct lines in each band
     scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
     nMant = halfN
