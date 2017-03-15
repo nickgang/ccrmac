@@ -40,7 +40,7 @@ def BitAllocConstMNR(bitBudget, maxMantBits, nBands, nLines, SMR):
     return mantBits
 
 # Question 1.c)
-def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
+def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR, bitReservoir, blocksize):
     """
     Allocates bits to scale factor bands so as to flatten the NMR across the spectrum
        Arguments:
@@ -65,15 +65,20 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
     mantBits = np.zeros_like(nLines,dtype=int)
     localSMR = np.array(SMR,copy=True)
     allocBits = 0
-
-    while allocBits < bitBudget:
+    if blocksize == 2:
+        bitFloor = -18
+    else:
+        bitFloor = -12
+    
+    
+    while allocBits < (bitBudget + bitReservoir) or np.maximum(localSMR) < bitFloor:
         smrSort = np.argsort(localSMR)[::-1]
         maxSMR = smrSort[0]
         if nLines[maxSMR] > 0:
-            if allocBits+nLines[maxSMR] >= bitBudget:
+            if allocBits+nLines[maxSMR] >= (bitBudget + bitReservoir) or localSMR[maxSMR] < bitFloor:
                 for i in range(1,nBands):
                     maxSMR = smrSort[i]
-                    if (allocBits)+nLines[maxSMR] >= bitBudget:
+                    if (allocBits)+nLines[maxSMR] >= (bitBudget + bitReservoir) or localSMR[maxSMR] < bitFloor:
                         pass
                     else:
                         allocBits += nLines[maxSMR]
@@ -87,18 +92,21 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
         else:
             localSMR[maxSMR] -= 6
 
+    
     # Go back through and reallocate lonely bits and overflowing bits
     badBand = mantBits < maxMantBits
     # db print "Allocating Lonely Ones: "
+    bitBudget -= allocBits
     while (mantBits==1).any() and badBand.any():
         # Pick lonely bit in highest critical band possible
         i = np.max(np.argwhere(mantBits==1))
         mantBits[i] = 0
         badBand[i] = False
+        bitBudget += nLines[i]
         # db print SMR*(nLines>0)
         i = np.arange(nBands)[badBand][np.argmax(((SMR*(nLines>0))-mantBits*6)[badBand])]
         
-        if (bitBudget-nLines[i]) >= 0 and nLines[i] > 0:
+        if ((bitReservoir + bitBudget)-nLines[i]) >= 0 and nLines[i] > 0 and localSMR[i] > bitFloor:
             mantBits[i] += 1
             bitBudget -= nLines[i]
             if mantBits[i] > maxMantBits:
@@ -107,6 +115,8 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
                 badBand[i] = False
         
         # db print mantBits
+    #print mantBits
+    print (SMR*(nLines>0))-mantBits*6
     
     mantBits = np.minimum(mantBits, np.ones_like(mantBits)*maxMantBits)
     return mantBits

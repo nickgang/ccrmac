@@ -150,7 +150,7 @@ def EncodeSingleChannel(data,codingParams):
     
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
     bitBudget -= 2
-    # db print "Bitbudget: ", bitBudget
+    #db print "Bitbudget: ", bitBudget
 
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data
@@ -177,7 +177,9 @@ def EncodeSingleChannel(data,codingParams):
     SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
     #print "SMR: ", SMRs
     # perform bit allocation using SMR results
-    bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
+    bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs, codingParams.bitReservoir, codingParams.blocksize)
+    codingParams.bitReservoir += bitBudget - np.sum(bitAlloc * sfBands.nLines)
+    print "BR: ", codingParams.bitReservoir
     # db print bitAlloc;
     # detect transient 
     #PE = CalcPE(getMaskedThreshold(data, mdctLines, overallScale, codingParams.sampleRate, sfBands), mdctLines, overallScale)

@@ -428,7 +428,7 @@ class PACFile(AudioFile):
 
 
 
-
+ 
 
 #-----------------------------------------------------------------------------
 
@@ -484,6 +484,7 @@ if __name__=="__main__":
             codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
             codingParams.prevPE = 10
+            codingParams.bitReservoir = 0
             # Calculate target bits/line based on Fs and data rate
            # codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*\
             #                                    K) - 204)/K
@@ -577,8 +578,8 @@ if __name__=="__main__":
                 codingParams.targetBitsPerSample = (((data_rate/codingParams.sampleRate)*\
                                                     K) - (6+np.sum(codingParams.sfBands.nLines > 0)*\
                                                     (codingParams.nScaleBits+codingParams.nMantSizeBits)))/K
-                if(codingParams.blocksize == 2):
-                    codingParams.targetBitsPerSample *= 1.6    
+                #if(codingParams.blocksize == 2):
+                #    codingParams.targetBitsPerSample *= 1.6    
                 # db print codingParams.targetBitsPerSample
             else:
                 data = inFile.ReadDataBlock(codingParams)
