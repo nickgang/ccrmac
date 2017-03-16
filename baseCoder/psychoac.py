@@ -251,17 +251,20 @@ def CalcSMRs(data, MDCTdata, MDCTscale, sampleRate, sfBands):
 
 def DetectTransient(data, codingParams):
     #fs = 48000
-    fs = codingParams.sampleRate
-    N = data.size
-    MDCTdata = MDCT(SineWindow(data),N/2,N/2)
-    sineWin = (1/float(N))*np.sum(np.power(SineWindow(np.ones_like(data)),2)) # Get avg pow of KBD window
-    sineDB = SPL((2/(sineWin))*(np.power(np.absolute(MDCTdata),2.)))# Find dB SPL of MDCT values
-    thresh = getMaskedThreshold(data,MDCTdata,0,fs,ScaleFactorBands(AssignMDCTLinesFromFreqLimits(MDCTdata.size,fs)))
-    PE = np.sum(np.log2(1+np.sqrt(Intensity(sineDB)/(Intensity(sineDB-thresh)))))/(MDCTdata.size)
-    delta = (PE - codingParams.prevPE)
-    # print delta # debug print to check PE change between blocks
-    DT = delta > 0.8
-    #print PE
-    codingParams.prevPE = PE
-    return (DT)
+    if codingParams.doBS:
+        fs = codingParams.sampleRate
+        N = data.size
+        MDCTdata = MDCT(SineWindow(data),N/2,N/2)
+        sineWin = (1/float(N))*np.sum(np.power(SineWindow(np.ones_like(data)),2)) # Get avg pow of KBD window
+        sineDB = SPL((2/(sineWin))*(np.power(np.absolute(MDCTdata),2.)))# Find dB SPL of MDCT values
+        thresh = getMaskedThreshold(data,MDCTdata,0,fs,ScaleFactorBands(AssignMDCTLinesFromFreqLimits(MDCTdata.size,fs)))
+        PE = np.sum(np.log2(1+np.sqrt(Intensity(sineDB)/(Intensity(sineDB-thresh)))))/(MDCTdata.size)
+        delta = (PE - codingParams.prevPE)
+        # print delta # debug print to check PE change between blocks
+        DT = delta > 0.8
+        #print PE
+        codingParams.prevPE = PE
+        return (DT)
+    else:
+        return False
 #-----------------------------------------------------------------------------

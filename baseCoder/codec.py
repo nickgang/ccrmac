@@ -19,8 +19,8 @@ from psychoac import *  # calculates SMRs for each scale factor band
 from bitalloc import BitAlloc,BitAllocSBR  #allocates bits to scale factor bands given SMRs
 from scipy import signal # signal processing tools
 
-SHORTBLOCKSIZE = 256
-LONGBLOCKSIZE = 2048
+#SHORTBLOCKSIZE = 256
+#LONGBLOCKSIZE = 2048
 
 def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codingParams):
     """Reconstitutes a single-channel block of encoded data into a block of
@@ -28,16 +28,16 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
 
     if(codingParams.blocksize == 3):
         #print "MDCTLines: ", codingParams.nMDCTLines
-        a = LONGBLOCKSIZE/2
-        b = SHORTBLOCKSIZE/2
+        a = codingParams.longBlockSize/2
+        b = codingParams.shortBlockSize/2
     elif (codingParams.blocksize == 2):
-        a = SHORTBLOCKSIZE/2
+        a = codingParams.shortBlockSize/2
         b = a
     elif (codingParams.blocksize == 1):
-        b = LONGBLOCKSIZE/2
-        a = SHORTBLOCKSIZE/2
+        b = codingParams.longBlockSize/2
+        a = codingParams.shortBlockSize/2
     else:
-        a = LONGBLOCKSIZE/2
+        a = codingParams.longBlockSize/2
         b = a
     N = a+b
     halfN = N/2
@@ -121,13 +121,13 @@ def EncodeDataWithCoupling(data,codingParams):
     """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
     # NEW: Determine block type and set a,b
     if(codingParams.blocksize < 2):
-        b = LONGBLOCKSIZE/2
+        b = codingParams.longBlockSize/2
     else:
-        b = SHORTBLOCKSIZE/2
+        b = codingParams.shortBlockSize/2
     if(codingParams.blocksize == 1 or codingParams.blocksize == 2):
-        a = SHORTBLOCKSIZE/2
+        a = codingParams.shortBlockSize/2
     else:
-        a = LONGBLOCKSIZE/2
+        a = codingParams.longBlockSize/2
     N = a+b
     halfN = N/2
     #print "A: ", a
@@ -236,13 +236,13 @@ def EncodeSingleChannel(data,codingParams,iCh):
     """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
     # NEW: Determine block type and set a,b
     if(codingParams.blocksize < 2):
-        b = LONGBLOCKSIZE/2
+        b = codingParams.longBlockSize/2
     else:
-        b = SHORTBLOCKSIZE/2
+        b = codingParams.shortBlockSize/2
     if(codingParams.blocksize == 1 or codingParams.blocksize == 2):
-        a = SHORTBLOCKSIZE/2
+        a = codingParams.shortBlockSize/2
     else:
-        a = LONGBLOCKSIZE/2
+        a = codingParams.longBlockSize/2
     N = a+b
     halfN = N/2
     #print "A: ", a
@@ -302,10 +302,10 @@ def EncodeSingleChannel(data,codingParams,iCh):
     else:
         bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs, codingParams.bitReservoir, codingParams.blocksize)
     codingParams.bitReservoir += bitBudget - np.sum(bitAlloc * sfBands.nLines)
-    print "blocksize: ", codingParams.blocksize
-    print "Bit Reservoir: ", codingParams.bitReservoir
-    if codingParams.blocksize == 2:
-       print bitAlloc
+    #print "blocksize: ", codingParams.blocksize
+    #print "Bit Reservoir: ", codingParams.bitReservoir
+    #if codingParams.blocksize == 2:
+    #   print bitAlloc
     # given the bit allocations, quantize the mdct lines in each band
     scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
     nMant = halfN
