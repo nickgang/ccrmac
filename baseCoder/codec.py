@@ -147,9 +147,9 @@ def EncodeDataWithCoupling(data,codingParams):
     # db print "Encode coupling: ", sfBands.nLines
     # NEW compute target bit rate based on block type
     bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
-    bitBudget -=  nScaleBits*(sfBands.nBands + 1)  # less scale factor bits (including overall scale factor)
-    bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
-    bitBudget -= 2 # block ID size TODO: make this a variable
+    #bitBudget -=  nScaleBits*(sfBands.nBands + 1)  # less scale factor bits (including overall scale factor)
+    #bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
+    #bitBudget -= 2 # block ID size TODO: make this a variable
     mdctLinesFull = []
     for iCh in range(codingParams.nChannels):
         if codingParams.doSBR == True:
@@ -262,9 +262,9 @@ def EncodeSingleChannel(data,codingParams,iCh):
 
     # NEW compute target bit rate based on block type
     bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
-    bitBudget -=  nScaleBits*(sfBands.nBands + 1)  # less scale factor bits (including overall scale factor)
-    bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
-    bitBudget -= 2 # block ID size TODO: make this a variable
+    #bitBudget -=  nScaleBits*(sfBands.nBands + 1)  # less scale factor bits (including overall scale factor)
+    #bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
+    #bitBudget -= 2 # block ID size TODO: make this a variable
 
     if codingParams.doSBR == True:
         # Calculate Spectral Envelope based on original signal
@@ -294,6 +294,7 @@ def EncodeSingleChannel(data,codingParams,iCh):
     # compute the mantissa bit allocations
     # compute SMRs in side chain FFT
     SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
+    #print "BitBudget: ", bitBudget
     if codingParams.doSBR == True:
         # Critical band starting here are above cutoff
         cutBin = freqToBand(codingParams.sbrCutoff)

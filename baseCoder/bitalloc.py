@@ -72,12 +72,15 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR, bitReservoir, blocksiz
     useResv = (blocksize == 2) # short block draws reservoir
     #useResv = (blocksize != 0) # short and transition draw reservoir
     # useResv = 1 # all use reservoir, 0 for none
-    blockBudget = bitBudget + bitReservoir*useResv
+    if(bitReservoir > 0):
+        blockBudget = bitBudget + bitReservoir*useResv
+    else:
+        blockBudget = bitBudget
     
     if blocksize == 2:
-        bitFloor = -6  # bitFloor for short blocks
+        bitFloor = -9  # bitFloor for short blocks
     else:
-        bitFloor = -6  # bitFloor for long blocks
+        bitFloor = -9  # bitFloor for long blocks
     
     # remove '*(blocksize==2)' in four places to have all blocks take from reservoir
     while allocBits < blockBudget and not max(localSMR) < bitFloor:
@@ -144,12 +147,15 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, bitReservoir, block
     useResv = (blocksize == 2) # short block draws reservoir
     #useResv = (blocksize != 0) # short and transition draw reservoir
     # useResv = 1 # all use reservoir, 0 for none
-    blockBudget = bitBudget + bitReservoir*useResv
+    if(bitReservoir > 0):
+        blockBudget = bitBudget + bitReservoir*useResv
+    else:
+        blockBudget = bitBudget
     
     if blocksize == 2:
-        bitFloor = -6  # bitFloor for short blocks
+        bitFloor = -9  # bitFloor for short blocks
     else:
-        bitFloor = -6  # bitFloor for long blocks
+        bitFloor = -9  # bitFloor for long blocks
     
     # remove '*(blocksize==2)' in four places to have all blocks take from reservoir
     while allocBits < (blockBudget) and not max(localSMR) < bitFloor:
