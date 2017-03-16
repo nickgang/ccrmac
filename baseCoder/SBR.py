@@ -38,7 +38,7 @@ def calcSpecEnv(data,cutoff,fs,hfRecType=2):
             # Add noise to peaky sub band for bins more than 1 STD below the mean
             noiseBins = len(np.nonzero(subBand<np.mean(subBand)))
             subBand[np.nonzero(subBand<np.mean(subBand))] += \
-                            np.absolute(np.random.normal(0,0.0001,noiseBins))
+                            np.absolute(np.random.normal(0,0.001,noiseBins))
         # Add in additional high frequencies if there are less
         lowSize = int(len(subBand))
         highSize = int(len(XnI[cutBin:]))
