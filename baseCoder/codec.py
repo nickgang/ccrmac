@@ -16,7 +16,7 @@ from stereoCoding import *
 
 # used only by Encode
 from psychoac import *  # calculates SMRs for each scale factor band
-from bitalloc import BitAlloc,BitAllocSBR  #allocates bits to scale factor bands given SMRs
+from bitalloc import BitAlloc,BitAllocSBR,BitAllocCoupling  #allocates bits to scale factor bands given SMRs
 from scipy import signal # signal processing tools
 
 #SHORTBLOCKSIZE = 256
@@ -54,7 +54,7 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
         bitAlloc = bitAllocFull[iCh]
         mantissa = mantissaFull[iCh]
         overallScaleFactor = overallScaleFactorFull[iCh]
-        rescaleLevel = 1.*(1<<overallScaleFactorFull[iCh])
+        #rescaleLevel = 1.*(1<<overallScaleFactorFull[iCh])
         # reconstitute the first halfN MDCT lines of this channel from the stored data
         mdctLine = np.zeros(halfN,dtype=np.float64)
         iMant = 0
@@ -63,7 +63,7 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
             if bitAlloc[iBand]:
                 mdctLine[iMant:(iMant+nLines)]=vDequantize(scaleFactor[iBand], mantissa[iMant:(iMant+nLines)],codingParams.nScaleBits, bitAlloc[iBand])
             iMant += nLines
-        mdctLine /= rescaleLevel  # put overall gain back to original level
+        #mdctLine /= rescaleLevel  # put overall gain back to original level
         mdctLines.append(mdctLine)
 
     #print codingParams.couplingParams
@@ -75,6 +75,7 @@ def Decode(scaleFactorFull,bitAllocFull,mantissaFull,overallScaleFactorFull,codi
 
     mdctLines = np.array(mdctLines)
     for iCh in range(codingParams.nChannels):
+        mdctLines[iCh]/=(1<<overallScaleFactorFull[iCh])
         data.append(np.array([],dtype=np.float64))  # add location for this channel's data
         mdctLine = mdctLines[iCh]
         if codingParams.doSBR == True:
@@ -104,6 +105,7 @@ def Encode(data,codingParams):
     overallScaleFactor = []
     codingParams.couplingParams = np.zeros(1+((25-codingParams.nCouplingStart)*codingParams.nChannels)).astype(float)
     codingParams.coupledChannel = np.ones(codingParams.nMDCTLines,np.float64)*0.5
+    codingParams.bitAllocCoupled = np.zeros(codingParams.sfBands.nBands)
     if codingParams.doCoupling == True and codingParams.nMDCTLines > 128:
         (scaleFactor,bitAlloc,mantissa,overallScaleFactor) = EncodeDataWithCoupling(np.array(data),codingParams)
     else:
@@ -150,7 +152,12 @@ def EncodeDataWithCoupling(data,codingParams):
     bitBudget -=  nScaleBits*(sfBands.nBands + 1)  # less scale factor bits (including overall scale factor)
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
     bitBudget -= 2 # block ID size TODO: make this a variable
+    bitBudget -= 32*3
+    bitBudget -= 100
     mdctLinesFull = []
+    FullSMRs = []
+    SMRs_avg = np.zeros(codingParams.sfBands.nBands)
+    overallScaleFull = []
     for iCh in range(codingParams.nChannels):
         if codingParams.doSBR == True:
             # Calculate Spectral Envelope based on original signal
@@ -175,22 +182,30 @@ def EncodeDataWithCoupling(data,codingParams):
         # compute overall scale factor for this block and boost mdctLines using it
         maxLine = np.max( np.abs(mdctLines) )
         overallScale = ScaleFactor(maxLine,nScaleBits)  #leading zeroaes don't depend on nMantBits
+        overallScaleFull.append(overallScale)
         mdctLines *= (1<<overallScale)
         mdctLinesFull.append(mdctLines)
-
+        FullSMRs.append(CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands))
+        SMRs_avg += np.array(FullSMRs[iCh])/float(codingParams.nChannels)
     uncoupledData, coupledChannel, couplingParams = ChannelCoupling(mdctLinesFull,codingParams.sampleRate,codingParams.nCouplingStart)
     codingParams.couplingParams = couplingParams
     codingParams.coupledChannel = coupledChannel
     mdctLinesFull = uncoupledData
+    SMRs_avg*=(np.arange(sfBands.nBands)>=codingParams.nCouplingStart).astype(float)
+    bitAllocCoupled = BitAllocCoupling(int(bitBudget*.3),maxMantBits,sfBands.nBands,sfBands.nLines,SMRs_avg,codingParams.bitReservoir, codingParams.blocksize,codingParams.nCouplingStart)
+    codingParams.bitAllocCoupled = bitAllocCoupled
+    coupledBitsUsed = np.sum(bitAllocCoupled*sfBands.nLines)
+    codingParams.coupledBitsUsed = coupledBitsUsed
+    bitBudget -= coupledBitsUsed
 
     scaleFactorFull= []
     bitAllocFull = []
     mantissaFull = []
-    overallScaleFull = []
+    #overallScaleFull = []
     for iCh in range(codingParams.nChannels):
         # compute the mantissa bit allocations
         # compute SMRs in side chain FFT
-        SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
+        SMRs = FullSMRs[iCh]
         if codingParams.doSBR == True:
             # Critical band starting here are above cutoff
             cutBin = freqToBand(codingParams.sbrCutoff)

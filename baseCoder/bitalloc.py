@@ -195,4 +195,73 @@ def BitAllocSBR(bitBudget, maxMantBits, nBands, nLines, SMR, bitReservoir, block
     #print sbrBits
     return sbrBits.astype(int)
 
+def BitAllocCoupling(bitBudget, maxMantBits, nBands, nLines, SMR, bitReservoir, blocksize, cutBin):
+    """
+    Allocates bits to scale factor bands so as to flatten the NMR across the spectrum
+
+       Arguments:
+           bitBudget is total number of mantissa bits to allocate
+           maxMantBits is max mantissa bits that can be allocated per line
+           nBands is total number of scale factor bands
+           nLines[nBands] is number of lines in each scale factor band
+           SMR[nBands] is signal-to-mask ratio in each scale factor band
+           cutBin is the crtical band index above which we will perform HF Reconstruction
+
+        Return:
+            bits[nBands] is number of bits allocated to each scale factor band
+    """
+    cutBin = int(cutBin) # Make sure this is an integer
+    mantBits = np.zeros_like(nLines[cutBin:],dtype=int)
+    localSMR = np.array(SMR,copy=True)[cutBin:] # SMR of sub band
+    subBand = np.array(nLines,copy=True)[cutBin:]
+    allocBits = 0
+    if blocksize == 2:
+        bitFloor = -12  # bitFloor for short blocks
+    else:
+        bitFloor = -9 # bitFloor for long blocks
+    
+    # remove '*(blocksize==2)' in four places to have all blocks take from reservoir
+    while allocBits < (bitBudget + (bitReservoir*(blocksize==2))) or max(localSMR) < bitFloor:
+        smrSort = np.argsort(localSMR)[::-1]
+        maxSMR = smrSort[0]
+        if subBand[maxSMR] > 0:
+            if allocBits+subBand[maxSMR] >= bitBudget + (bitReservoir*(blocksize==2)) or localSMR[maxSMR] < bitFloor:
+                for i in range(1,nBands-(cutBin+1)):
+                    maxSMR = smrSort[i]
+                    if (allocBits)+subBand[maxSMR] >= bitBudget + (bitReservoir*(blocksize==2)) or localSMR[maxSMR] < bitFloor or subBand[maxSMR] == 0:
+                        pass
+                    else:
+                        allocBits += subBand[maxSMR]
+                        mantBits[maxSMR] += 1
+                        localSMR[maxSMR] -= 6
+    
+                break
+            else:
+                allocBits += subBand[maxSMR]
+                mantBits[maxSMR] += 1
+                localSMR[maxSMR] -= 6
+        else:
+            localSMR[maxSMR] -= 6
+
+    # Go back through and reallocate lonely bits and overflowing bits
+    badBand = mantBits < maxMantBits
+    bitBudget -= allocBits
+    while (mantBits==1).any() and badBand.any():
+        # Pick lonely bit in highest critical band possible
+        i = np.max(np.argwhere(mantBits==1))
+        mantBits[i] = 0
+        bitBudget += subBand[i]
+        i = (np.arange(25 - cutBin)[badBand])[np.argmax(((SMR[cutBin:]*(subBand>0))-mantBits*6)[badBand])]
+        if (bitBudget + (bitReservoir*(blocksize==2)) -subBand[i]) >= 0 and subBand[i] > 0 and localSMR[i] > bitFloor:
+            mantBits[i] += 1
+            localSMR[i] -= 6
+            bitBudget -= subBand[i]
+        badBand[i] = False    
+
+    mantBits = np.minimum(mantBits, np.ones_like(mantBits)*maxMantBits)
+    # db print mantBits
+    couplingBits = np.append(np.zeros(len(nLines)-len(subBand)),mantBits) # Add zeros back in for HF band
+    #print sbrBits
+    return couplingBits.astype(int)
+
 #-----------------------------------------------------------------------------
