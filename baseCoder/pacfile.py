@@ -109,6 +109,7 @@ import sys
 
 import numpy as np  # to allow conversion of data blocks to numpy's array object
 MAX16BITS = 32767
+DOSBR = True
 
 class PACFile(AudioFile):
     """
@@ -142,7 +143,7 @@ class PACFile(AudioFile):
         myParams.nMantSizeBits = nMantSizeBits
         # SBR Stuff
         myParams.sbrCutoff = 5300. # Specified in Hz
-        myParams.doSBR = True # For toggling SBR algorithm
+        myParams.doSBR = DOSBR # For toggling SBR algorithm
         myParams.nSpecEnvBits = 8 # number of bits per spectral envelope band
         myParams.specEnv = np.zeros((nChannels,int(24-codec.freqToBand(myParams.sbrCutoff))))
 
@@ -203,12 +204,13 @@ class PACFile(AudioFile):
             # CUSTOM DATA:
             # < now can unpack any custom data passed in the nBytes of data >
             # Grab each spectral envelope value and dequantize
-            for i in range(len(codingParams.specEnv[iCh])):
-                envScale = pb.ReadBits(codingParams.nScaleBits)
-                envMant = pb.ReadBits(codingParams.nScaleBits) # Sitcking with 4
-                # Dequantize this band of spectral envelope
-                codingParams.specEnv[iCh][i] = codec.DequantizeFP(envScale,envMant,\
-                                codingParams.nScaleBits,codingParams.nScaleBits)
+            if codingParams.doSBR ==True:
+                for i in range(len(codingParams.specEnv[iCh])):
+                    envScale = pb.ReadBits(codingParams.nScaleBits)
+                    envMant = pb.ReadBits(codingParams.nScaleBits) # Sitcking with 4
+                    # Dequantize this band of spectral envelope
+                    codingParams.specEnv[iCh][i] = codec.DequantizeFP(envScale,envMant,\
+                                    codingParams.nScaleBits,codingParams.nScaleBits)
 
             # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
             decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams,iCh)
@@ -311,11 +313,12 @@ class PACFile(AudioFile):
 
             # CUSTOM DATA:
             # < now can add in custom data if space allocated in nBytes above>
-            for i in range(len(codingParams.specEnv[iCh])):
-                envScale = codec.ScaleFactor(codingParams.specEnv[iCh][i],codingParams.nScaleBits,4)
-                pb.WriteBits(envScale,codingParams.nScaleBits)
-                # Hardcoding 4 Mantissa bits, using floating-point to quantize
-                pb.WriteBits(codec.MantissaFP(codingParams.specEnv[iCh][i],envScale,codingParams.nScaleBits,4),codingParams.nScaleBits)
+            if codingParams.doSBR == True:
+                for i in range(len(codingParams.specEnv[iCh])):
+                    envScale = codec.ScaleFactor(codingParams.specEnv[iCh][i],codingParams.nScaleBits,4)
+                    pb.WriteBits(envScale,codingParams.nScaleBits)
+                    # Hardcoding 4 Mantissa bits, using floating-point to quantize
+                    pb.WriteBits(codec.MantissaFP(codingParams.specEnv[iCh][i],envScale,codingParams.nScaleBits,4),codingParams.nScaleBits)
 
             # finally, write the data in this channel's PackedBits object to the output file
             self.fp.write(pb.GetPackedData())
@@ -370,13 +373,12 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "glock_trim.wav"
+    input_filename = "germ_trim.wav"
     coded_filename = "coded.pac"
-    data_rate = 48000. # User defined data rate in bits/s/ch
+    data_rate = 128000. # User defined data rate in bits/s/ch
     cutoff = 5300 # Global SBR cutoff
-    output_filename = "glock_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
+    output_filename = "germ_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
-    doSBR = True
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
@@ -416,7 +418,7 @@ if __name__=="__main__":
             codingParams.nSamplesPerBlock = codingParams.nMDCTLines
             # SBR related stuff
             codingParams.sbrCutoff = cutoff # Specified in Hz
-            codingParams.doSBR = doSBR # For toggling SBR algorithm
+            codingParams.doSBR = DOSBR # For toggling SBR algorithm
             codingParams.nSpecEnvBits = nSpecEnvBits # Bits per band in spectral envelope
             codingParams.specEnv  = np.zeros((codingParams.nChannels,int(24-codec.freqToBand(codingParams.sbrCutoff))))
             # Calculate target bits/line based on Fs and data rate
