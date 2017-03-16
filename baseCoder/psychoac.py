@@ -260,7 +260,7 @@ def DetectTransient(data, codingParams):
     PE = np.sum(np.log2(1+np.sqrt(Intensity(sineDB)/(Intensity(sineDB-thresh)))))/(MDCTdata.size)
     delta = (PE - codingParams.prevPE)
     # print delta # debug print to check PE change between blocks
-    DT = delta > 1
+    DT = delta > 0.8
     #print PE
     codingParams.prevPE = PE
     return (DT)

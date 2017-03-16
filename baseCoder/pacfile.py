@@ -506,12 +506,13 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #TODO: Lowpass all data at cutoff, whole file or just block + adjascent blocks
-    input_filename = "Castanets.wav"
-    coded_filename = "coded.pac"
+    input_filename = "halfHarp.wav"
+    #coded_filename = "coded.pac"
     data_rate = 128000. # User defined data rate in bits/s/ch
     cutoff = 5300 # Global SBR cutoff
     couplingFrequency = 3700
-    output_filename = input_filename[:-4] + "_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
+    output_filename = input_filename[:-4] + "_9_9_256_8_" + str(int(data_rate/1000.)) + "kbps" + str(cutoff) + "Hz.wav"
+    coded_filename = output_filename[:-4] + ".pac"
     nSpecEnvBits = 8 # number of bits per spectral envelope band
     doSBR = False
     doCoupling = False
