@@ -6,17 +6,23 @@ Nick Gang
 Mark Hertensteiner
 Ifueko Igbinedion
 
-Meeting Notes 2/21:
-* Joint stereo coding - Ifueko
-    * ms coding
-    * get components for both signals to look at masking curve
-    * spatial/binaural/ambisonics
-        * How do we keep the data rate low enough
-* Block switching - Mark
-    * Perceptual entropy to aid with block switching
-        * Value in book is wrong
-* Spectral transposition - Nick
-* Better noise masking research?
+Audio Coder Implementing the Following Features
+* High Bit Rate Mode
+    * Transient Detection
+    * Block Switching
+      * Short block size of 128 samples
+      * Long block size of 256 samples
+* Low Bit Rate Mode
+    * Transient Dection
+    * Block Switching
+      * Short block size of 128 samples
+      * Long block size of 256 samples
+    * Spectral Band Replication
+      * Tested down to 48kbps
+      * Default cutoff frequency of 5300 Hz    
+
+Untested Features 
+* Stereo MS Coding
 
 Directories:
 * Papers - useful literature pertaining to our chosen features
